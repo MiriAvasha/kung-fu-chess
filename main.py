@@ -29,6 +29,8 @@ def main():
         cleaned_line = line.strip()
         if cleaned_line == "Commands:":
             break
+        if not cleaned_line or cleaned_line.startswith("Board:"):
+            continue
         board.add_row(cleaned_line)
 
     # שלב ב': קריאת הפקודות והרצה אוטומטית דרך המילון

@@ -1,6 +1,6 @@
 import sys
 from config.config import BoardConfig
-from rules.piece_rules import MoveValidator
+from rules.piece_rules import MoveContext, MoveValidator
 
 class ChessBoard:
     def __init__(self):
@@ -36,19 +36,19 @@ class ChessBoard:
 
         clicked_token = self.grid[row][col]
 
-        if clicked_token != BoardConfig.EMPTY_CELL:
+        if self.selected_piece is not None:
+            from_row, from_col = self.selected_piece
+            piece = self.grid[from_row][from_col]
+            piece_type = piece[1]
+
+            move = MoveContext(self.grid, from_row, from_col, row, col)
+            if MoveValidator.is_move_legal_for_piece(piece_type, move):
+                self.grid[row][col] = piece
+                self.grid[from_row][from_col] = BoardConfig.EMPTY_CELL
+
+            self.selected_piece = None
+        elif clicked_token != BoardConfig.EMPTY_CELL:
             self.selected_piece = (row, col)
-        else:
-            if self.selected_piece is not None:
-                from_row, from_col = self.selected_piece
-                piece = self.grid[from_row][from_col]
-                piece_type = piece[1]
-
-                if MoveValidator.is_move_legal_for_piece(piece_type, from_row, from_col, row, col):
-                    self.grid[row][col] = piece
-                    self.grid[from_row][from_col] = BoardConfig.EMPTY_CELL
-
-                self.selected_piece = None
 
     def advance_clock(self, ms: int):
         self.clock += ms
