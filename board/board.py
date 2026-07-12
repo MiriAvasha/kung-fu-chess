@@ -116,7 +116,15 @@ class ChessBoard:
 
     def _apply_move(self, active_move: ActiveMove):
         captured = self.grid[active_move.to_row][active_move.to_col]
-        self.grid[active_move.to_row][active_move.to_col] = active_move.piece
+        piece = active_move.piece
+
+        if piece[1] == 'P':
+            if piece[0] == 'w' and active_move.to_row == 0:
+                piece = piece[0] + 'Q'
+            elif piece[0] == 'b' and active_move.to_row == len(self.grid) - 1:
+                piece = piece[0] + 'Q'
+
+        self.grid[active_move.to_row][active_move.to_col] = piece
         self.grid[active_move.from_row][active_move.from_col] = BoardConfig.EMPTY_CELL
 
         if captured != BoardConfig.EMPTY_CELL and captured[1] == 'K':

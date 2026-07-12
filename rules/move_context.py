@@ -94,3 +94,14 @@ class MoveContext:
     def pawn_forward_row_delta(self) -> int:
         """כיוון הקדימה של רגלי לפי הצבע שלו."""
         return _PAWN_FORWARD[self.color]
+
+    def is_pawn_start_row(self) -> bool:
+        """האם הרגלי נמצא בשורת ההתחלה שלו."""
+        if self.color == 'w':
+            return self.from_row == len(self.grid) - 1
+        return self.from_row == 0
+
+    def is_pawn_double_path_clear(self) -> bool:
+        """האם המשבצת באמצע מהלך כפול (2 תאים) פנויה."""
+        mid_row = self.from_row + self.pawn_forward_row_delta()
+        return self.grid[mid_row][self.from_col] == BoardConfig.EMPTY_CELL

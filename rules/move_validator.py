@@ -25,16 +25,22 @@ def validate_pawn(move: MoveContext) -> bool:
     """
     רגלי:
     - צעד אחד קדימה ישר → רק למשבצת ריקה
+    - שני צעדים קדימה מהשורה הראשונה → מסלול פנוי + יעד ריק
     - צעד אחד באלכסון קדימה → רק אכילה (היעד חייב להכיל אויב)
-    - אסור לזוז 2 משבצות, אסור לאכול קדימה ישר
+    - אסור לאכול קדימה ישר
     """
     forward = move.pawn_forward_row_delta()
 
-    # תנועה קדימה ישרה (בלי שינוי עמודה)
     if move.col_delta == 0 and move.row_delta == forward:
         return move.is_destination_empty()
 
-    # אכילה באלכסון קדימה (שינוי עמודה של 1)
+    if move.col_delta == 0 and move.row_delta == 2 * forward:
+        return (
+            move.is_pawn_start_row()
+            and move.is_pawn_double_path_clear()
+            and move.is_destination_empty()
+        )
+
     if abs(move.col_delta) == 1 and move.row_delta == forward:
         return not move.is_destination_empty()
 
