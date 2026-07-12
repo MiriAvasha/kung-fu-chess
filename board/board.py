@@ -1,6 +1,7 @@
 import sys
 from config.config import BoardConfig
-from rules.piece_rules import MoveContext, MoveValidator
+from rules.move_context import MoveContext
+from rules.move_validator import MoveValidator
 
 class ChessBoard:
     def __init__(self):
