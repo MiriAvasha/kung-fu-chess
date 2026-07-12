@@ -42,6 +42,7 @@ class ChessBoard:
         self.current_time = 0
         self.active_moves = {}
         self._move_order = 0
+        self.game_over = False
 
     def add_row(self, row_str: str):
         tokens = row_str.strip().split()
@@ -114,8 +115,13 @@ class ChessBoard:
         return False
 
     def _apply_move(self, active_move: ActiveMove):
+        captured = self.grid[active_move.to_row][active_move.to_col]
         self.grid[active_move.to_row][active_move.to_col] = active_move.piece
         self.grid[active_move.from_row][active_move.from_col] = BoardConfig.EMPTY_CELL
+
+        if captured != BoardConfig.EMPTY_CELL and captured[1] == 'K':
+            self.game_over = True
+            self.active_moves.clear()
 
     def _complete_due_moves(self):
         due_moves = [
@@ -146,11 +152,19 @@ class ChessBoard:
                     cancelled.add(j)
 
         for i, move in enumerate(due_moves):
+            if self.game_over:
+                break
             if i not in cancelled:
                 self._apply_move(move)
 
     def handle_click(self, x: int, y: int):
+        if self.game_over:
+            return
+
         self._complete_due_moves()
+
+        if self.game_over:
+            return
 
         col = x // 100
         row = y // 100
