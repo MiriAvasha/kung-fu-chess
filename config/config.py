@@ -5,6 +5,20 @@ class BoardConfig:
     EMPTY_CELL = '.'
     VALID_COLORS = {'w', 'b'}
     VALID_PIECES = {'K', 'Q', 'R', 'B', 'N', 'P'}
+    MS_PER_CELL = 1000
+
+    PIECE_SPEEDS = {
+        'P': 1000,
+        'R': 1000,
+        'B': 800,
+        'N': 400,
+        'Q': 600,
+        'K': 1200,
+    }
+
+    @classmethod
+    def get_speed_for_piece(cls, piece_type: str) -> int:
+        return cls.PIECE_SPEEDS.get(piece_type, cls.MS_PER_CELL)
 
     @classmethod
     def is_valid_token(cls, token: str) -> bool:
