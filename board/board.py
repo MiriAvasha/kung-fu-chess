@@ -264,8 +264,11 @@ class ChessBoard:
                         piece, from_row, from_col, row, col,
                         self.current_time, duration, self._move_order
                     )
-
-            self.selected_piece = None
+                self.selected_piece = None
+            elif clicked_token != BoardConfig.EMPTY_CELL and clicked_token[0] == piece[0]:
+                self.selected_piece = (row, col)
+            else:
+                self.selected_piece = None
         elif clicked_token != BoardConfig.EMPTY_CELL:
             if self._is_moving_from(row, col):
                 return

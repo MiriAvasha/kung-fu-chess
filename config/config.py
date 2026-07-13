@@ -11,10 +11,10 @@ class BoardConfig:
     PIECE_SPEEDS = {
         'P': 1000,
         'R': 1000,
-        'B': 800,
-        'N': 400,
-        'Q': 600,
-        'K': 1200,
+        'B': 1000,
+        'N': 1000,
+        'Q': 1000,
+        'K': 1000,
     }
 
     @classmethod

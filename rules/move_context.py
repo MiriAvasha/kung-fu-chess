@@ -97,9 +97,10 @@ class MoveContext:
 
     def is_pawn_start_row(self) -> bool:
         """האם הרגלי נמצא בשורת ההתחלה שלו."""
+        rows = len(self.grid)
         if self.color == 'w':
-            return self.from_row == len(self.grid) - 1
-        return self.from_row == 0
+            return self.from_row == rows - 2
+        return self.from_row == (1 if rows >= 5 else 0)
 
     def is_pawn_double_path_clear(self) -> bool:
         """האם המשבצת באמצע מהלך כפול (2 תאים) פנויה."""
