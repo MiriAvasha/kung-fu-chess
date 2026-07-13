@@ -34,6 +34,19 @@ class ActiveMove:
         return self.start_time + self.duration
 
 
+class ActiveJump:
+    def __init__(self, piece, row, col, start_time):
+        self.piece = piece
+        self.row = row
+        self.col = col
+        self.start_time = start_time
+        self.duration = BoardConfig.JUMP_DURATION
+
+    @property
+    def end_time(self) -> int:
+        return self.start_time + self.duration
+
+
 class ChessBoard:
     def __init__(self):
         self.grid = []
@@ -41,6 +54,7 @@ class ChessBoard:
         self.selected_piece = None
         self.current_time = 0
         self.active_moves = {}
+        self.active_jumps = {}
         self._move_order = 0
         self.game_over = False
 
@@ -64,6 +78,20 @@ class ChessBoard:
 
     def _is_moving_from(self, row: int, col: int) -> bool:
         return (row, col) in self.active_moves
+
+    def _is_airborne_at(self, row: int, col: int):
+        jump = self.active_jumps.get((row, col))
+        if jump and self.current_time <= jump.end_time:
+            return jump
+        return None
+
+    def _expire_due_jumps(self):
+        expired = [
+            key for key, jump in self.active_jumps.items()
+            if self.current_time > jump.end_time
+        ]
+        for key in expired:
+            del self.active_jumps[key]
 
     @staticmethod
     def _is_mutual_enemy_collision(
@@ -115,6 +143,15 @@ class ChessBoard:
         return False
 
     def _apply_move(self, active_move: ActiveMove):
+        airborne = self._is_airborne_at(active_move.to_row, active_move.to_col)
+        if airborne and airborne.piece[0] != active_move.piece[0]:
+            self.grid[active_move.from_row][active_move.from_col] = BoardConfig.EMPTY_CELL
+            if active_move.piece[1] == 'K':
+                self.game_over = True
+                self.active_moves.clear()
+                self.active_jumps.clear()
+            return
+
         captured = self.grid[active_move.to_row][active_move.to_col]
         piece = active_move.piece
 
@@ -164,6 +201,35 @@ class ChessBoard:
                 break
             if i not in cancelled:
                 self._apply_move(move)
+
+        self._expire_due_jumps()
+
+    def handle_jump(self, x: int, y: int):
+        if self.game_over:
+            return
+
+        self._complete_due_moves()
+
+        if self.game_over:
+            return
+
+        col = x // 100
+        row = y // 100
+
+        if row < 0 or row >= len(self.grid) or col < 0 or col >= self.width:
+            return
+
+        if self.grid[row][col] == BoardConfig.EMPTY_CELL:
+            return
+
+        if self._is_moving_from(row, col):
+            return
+
+        if (row, col) in self.active_jumps:
+            return
+
+        piece = self.grid[row][col]
+        self.active_jumps[(row, col)] = ActiveJump(piece, row, col, self.current_time)
 
     def handle_click(self, x: int, y: int):
         if self.game_over:

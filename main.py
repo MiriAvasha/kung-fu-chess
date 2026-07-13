@@ -2,6 +2,7 @@ import sys
 from board.board import ChessBoard
 from handlers.click import ClickHandler
 from handlers.wait import WaitHandler
+from handlers.jump import JumpHandler
 from handlers.print_board import PrintBoardHandler
 
 class CommandRegistry:
@@ -11,6 +12,7 @@ class CommandRegistry:
     _HANDLERS = {
         "click": ClickHandler,
         "wait": WaitHandler,
+        "jump": JumpHandler,
         "print": PrintBoardHandler
     }
 

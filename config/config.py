@@ -6,6 +6,7 @@ class BoardConfig:
     VALID_COLORS = {'w', 'b'}
     VALID_PIECES = {'K', 'Q', 'R', 'B', 'N', 'P'}
     MS_PER_CELL = 1000
+    JUMP_DURATION = 1000
 
     PIECE_SPEEDS = {
         'P': 1000,
