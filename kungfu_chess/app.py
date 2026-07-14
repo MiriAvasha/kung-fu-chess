@@ -18,7 +18,3 @@ def main():
     printer = BoardPrinter()
     runner = ScriptRunner(engine, controller, printer)
     runner.run(sys.stdin)
-
-
-if __name__ == '__main__':
-    main()
