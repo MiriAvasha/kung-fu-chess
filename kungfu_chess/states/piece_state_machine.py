@@ -1,16 +1,33 @@
 import math
 
+import constants
+
 STATE_IDLE = 'idle'
 STATE_MOVE = 'move'
 STATE_JUMP = 'jump'
 STATE_SHORT_REST = 'short_rest'
 STATE_LONG_REST = 'long_rest'
 
+EVENT_START_MOVE = 'start_move'
+EVENT_START_JUMP = 'start_jump'
+EVENT_FINISHED = 'finished'
+
+# Explicit state table: (current_state, event) -> next_state
+TRANSITIONS = {
+    (STATE_IDLE, EVENT_START_MOVE): STATE_MOVE,
+    (STATE_IDLE, EVENT_START_JUMP): STATE_JUMP,
+    (STATE_MOVE, EVENT_FINISHED): STATE_LONG_REST,
+    (STATE_JUMP, EVENT_FINISHED): STATE_SHORT_REST,
+    (STATE_SHORT_REST, EVENT_FINISHED): STATE_IDLE,
+    (STATE_LONG_REST, EVENT_FINISHED): STATE_IDLE,
+}
+
 REST_STATES = {STATE_SHORT_REST, STATE_LONG_REST}
 BUSY_STATES = {STATE_MOVE, STATE_JUMP, STATE_SHORT_REST, STATE_LONG_REST}
 
 BREATH_AMPLITUDE_PX = 3.0
 BREATH_PERIOD_MS = 1400.0
+JUMP_HOP_PX = 28.0
 
 
 class PieceStateMachine:
@@ -28,6 +45,17 @@ class PieceStateMachine:
         self.base_pixel_y = 0.0
         self._on_arrived = None
 
+    def can_transition(self, event: str) -> bool:
+        return (self.state, event) in TRANSITIONS
+
+    def transition(self, event: str) -> bool:
+        """Apply one row from TRANSITIONS. Returns False if the event is illegal now."""
+        next_state = TRANSITIONS.get((self.state, event))
+        if next_state is None:
+            return False
+        self.state = next_state
+        return True
+
     @property
     def is_idle(self) -> bool:
         return self.state == STATE_IDLE
@@ -35,6 +63,10 @@ class PieceStateMachine:
     @property
     def is_resting(self) -> bool:
         return self.state in REST_STATES
+
+    @property
+    def is_jumping(self) -> bool:
+        return self.state == STATE_JUMP
 
     @property
     def is_busy(self) -> bool:
@@ -58,13 +90,27 @@ class PieceStateMachine:
         self.pixel_x = self.base_pixel_x
         self.pixel_y = self.base_pixel_y
 
+    def abort_to_cell(self, cell, cell_size: int):
+        """Stop mid-move and stay on the last safe square (before a collision)."""
+        self._on_arrived = None
+        self.state = STATE_IDLE
+        self.elapsed_ms = 0
+        self.duration_ms = 0
+        self.idle_ms = 0
+        self.from_pos = None
+        self.to_pos = None
+        self.place_at_cell(cell.row, cell.col, cell_size)
+
     def start_move(self, from_pos, to_pos, cell_size: int, on_arrived=None):
+        if not self.can_transition(EVENT_START_MOVE):
+            return False
         state_assets = self.assets.get_state(STATE_MOVE)
         if state_assets is None:
             return False
         cells = max(abs(to_pos.row - from_pos.row), abs(to_pos.col - from_pos.col), 1)
         speed = state_assets.speed_m_per_sec or 1.0
-        self.state = STATE_MOVE
+        if not self.transition(EVENT_START_MOVE):
+            return False
         self.elapsed_ms = 0
         self.idle_ms = 0
         self.duration_ms = int(round(cells / speed * 1000))
@@ -75,13 +121,17 @@ class PieceStateMachine:
         return True
 
     def start_jump(self, cell, cell_size: int, on_arrived=None):
+        if not self.can_transition(EVENT_START_JUMP):
+            return False
         state_assets = self.assets.get_state(STATE_JUMP)
         if state_assets is None:
             return False
-        self.state = STATE_JUMP
+        if not self.transition(EVENT_START_JUMP):
+            return False
         self.elapsed_ms = 0
         self.idle_ms = 0
-        self.duration_ms = state_assets.animation_duration_ms
+        # Match VPL: jump lasts JUMP_DURATION ms on the same logical cell.
+        self.duration_ms = constants.JUMP_DURATION
         self.from_pos = cell
         self.to_pos = cell
         self.place_at_cell(cell.row, cell.col, cell_size)
@@ -97,10 +147,15 @@ class PieceStateMachine:
             return
 
         self.elapsed_ms += dt_ms
-        state_assets = self.assets.get_state(self.state)
+        progress = 1.0 if self.duration_ms <= 0 else min(1.0, self.elapsed_ms / float(self.duration_ms))
 
-        if self.state in (STATE_MOVE, STATE_JUMP) and self.from_pos and self.to_pos:
-            progress = 1.0 if self.duration_ms <= 0 else min(1.0, self.elapsed_ms / float(self.duration_ms))
+        if self.state == STATE_JUMP and self.from_pos is not None:
+            self.base_pixel_x = self.from_pos.col * cell_size
+            self.base_pixel_y = self.from_pos.row * cell_size
+            hop = math.sin(progress * math.pi) * JUMP_HOP_PX
+            self.pixel_x = self.base_pixel_x
+            self.pixel_y = self.base_pixel_y - hop
+        elif self.state == STATE_MOVE and self.from_pos and self.to_pos:
             start_x = self.from_pos.col * cell_size
             start_y = self.from_pos.row * cell_size
             end_x = self.to_pos.col * cell_size
@@ -111,27 +166,39 @@ class PieceStateMachine:
             self.pixel_y = self.base_pixel_y
 
         if self.elapsed_ms >= self.duration_ms:
-            self._finish_state(state_assets, cell_size)
+            self._finish_state(cell_size)
 
-    def _finish_state(self, state_assets, cell_size: int):
-        next_state = state_assets.next_state if state_assets else STATE_IDLE
+    def _finish_state(self, cell_size: int):
+        previous = self.state
 
-        if self.state in (STATE_MOVE, STATE_JUMP) and self.to_pos is not None:
+        if previous in (STATE_MOVE, STATE_JUMP) and self.to_pos is not None:
+            land_at = self.to_pos
             if self._on_arrived is not None:
-                self._on_arrived(self.to_pos)
+                # Callback may return a Position to bounce back (e.g. same-color collision).
+                result = self._on_arrived(self.to_pos)
                 self._on_arrived = None
-            self.place_at_cell(self.to_pos.row, self.to_pos.col, cell_size)
+                if result is not None:
+                    land_at = result
+            self.place_at_cell(land_at.row, land_at.col, cell_size)
 
-        if next_state in REST_STATES:
-            rest_assets = self.assets.get_state(next_state)
-            self.state = next_state
+        if not self.transition(EVENT_FINISHED):
+            self.state = STATE_IDLE
+            self.elapsed_ms = 0
+            self.duration_ms = 0
+            self.idle_ms = 0
+            self.from_pos = None
+            self.to_pos = None
+            return
+
+        if self.state in REST_STATES:
+            rest_assets = self.assets.get_state(self.state)
             self.elapsed_ms = 0
             self.duration_ms = rest_assets.animation_duration_ms if rest_assets else 500
             self.from_pos = None
             self.to_pos = None
             return
 
-        self.state = STATE_IDLE
+        # Entered idle via TRANSITIONS
         self.elapsed_ms = 0
         self.duration_ms = 0
         self.idle_ms = 0

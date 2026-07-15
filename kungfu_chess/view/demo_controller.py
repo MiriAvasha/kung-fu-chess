@@ -1,6 +1,7 @@
 from assets.piece_loader import PieceAssetLoader
 from model.board import board_from_token_rows
 from model.position import Position
+from rules.path_utils import last_square_before, last_squares_before_head_on
 from rules.piece_rules import PIECE_RULES
 from rules.promotion import DEFAULT_PROMOTION_SERVICE
 from states.piece_state_machine import PieceStateMachine, STATE_IDLE
@@ -30,6 +31,8 @@ class DemoController:
         self.view = BoardView(cell_size)
         self.promotion = DEFAULT_PROMOTION_SERVICE
         self.machines = {}
+        self.active_moves = {}
+        self._move_order = 0
         self.selected_cell = None
         self.legal_destinations = set()
         self.game_over = False
@@ -50,6 +53,57 @@ class DemoController:
             return None, None
         return piece, self.machines.get(piece.id)
 
+    def _eliminate(self, piece, cell: Position):
+        """Remove a piece from the board and cancel any in-flight move/animation."""
+        self.active_moves.pop(piece.id, None)
+        if self.board.piece_at(cell) is piece:
+            self.board.remove_piece(cell)
+        machine = self.machines.pop(piece.id, None)
+        if machine is not None:
+            machine._on_arrived = None
+        if piece.kind == 'K':
+            self.game_over = True
+
+    def _find_mutual_swap(self, piece_id, source: Position, dest: Position):
+        for other_id, move in self.active_moves.items():
+            if other_id == piece_id:
+                continue
+            if move['source'] == dest and move['dest'] == source:
+                return move
+        return None
+
+    def _find_same_destination_ally(self, piece_id, dest: Position, color: str):
+        for other_id, move in self.active_moves.items():
+            if other_id == piece_id:
+                continue
+            if move['dest'] == dest and move['piece'].color == color:
+                return move
+        return None
+
+    def _settle_before_collision(self, piece, from_cell: Position, stop_cell: Position, abort_animation: bool = True):
+        """Same-color collision: stay on closest square reached before they met."""
+        self.active_moves.pop(piece.id, None)
+        landed = from_cell
+        if stop_cell != from_cell and self.board.piece_at(from_cell) is piece:
+            if self.board.piece_at(stop_cell) is None:
+                new_kind = self.promotion.resolve(self.board, piece, stop_cell)
+                self.board.move_piece(from_cell, stop_cell, new_kind)
+                if new_kind is not None:
+                    machine = self.machines.get(piece.id)
+                    if machine is not None:
+                        machine.assets = self.loader.load(piece.color, piece.kind)
+                landed = stop_cell
+            else:
+                stop_cell = from_cell
+        else:
+            stop_cell = landed
+        piece.state = STATE_IDLE
+        if abort_animation:
+            machine = self.machines.get(piece.id)
+            if machine is not None:
+                machine.abort_to_cell(stop_cell, self.cell_size)
+        return stop_cell
+
     def click(self, x: int, y: int):
         if self.game_over:
             return
@@ -61,6 +115,11 @@ class DemoController:
             return
 
         if self.selected_cell is not None:
+            # Second click on the same square = jump (stay on cell, airborne).
+            if cell == self.selected_cell:
+                self.jump_selected()
+                return
+
             if cell in self.legal_destinations:
                 self._start_move(self.selected_cell, cell)
                 self.selected_cell = None
@@ -120,22 +179,82 @@ class DemoController:
         if piece is None or machine is None or not machine.is_idle:
             return
 
+        self._move_order += 1
+        order = self._move_order
+        self.active_moves[piece.id] = {
+            'piece': piece,
+            'source': source,
+            'dest': destination,
+            'order': order,
+        }
+
         def on_arrived(dest: Position):
-            captured = self.board.piece_at(dest)
-            if captured is not None:
-                self.board.remove_piece(dest)
-                if captured.id in self.machines:
-                    del self.machines[captured.id]
-                if captured.kind == 'K':
-                    self.game_over = True
+            move = self.active_moves.pop(piece.id, None)
+            if move is None or piece.id not in self.machines:
+                # Already cancelled / captured by an earlier opponent.
+                return source
+
+            swap = self._find_mutual_swap(piece.id, source, dest)
+
+            # Same-color head-on: each stops on closest square reached before meeting.
+            if swap is not None and swap['piece'].color == piece.color:
+                stop_a, stop_b = last_squares_before_head_on(
+                    source, dest, swap['source'], swap['dest']
+                )
+                self._settle_before_collision(swap['piece'], swap['source'], stop_b)
+                return self._settle_before_collision(
+                    piece, source, stop_a, abort_animation=False
+                )
+
+            same_dest_ally = self._find_same_destination_ally(piece.id, dest, piece.color)
+            if same_dest_ally is not None:
+                stop_self = last_square_before(source, dest, dest)
+                stop_other = last_square_before(
+                    same_dest_ally['source'], same_dest_ally['dest'], dest
+                )
+                self._settle_before_collision(
+                    same_dest_ally['piece'], same_dest_ally['source'], stop_other
+                )
+                return self._settle_before_collision(
+                    piece, source, stop_self, abort_animation=False
+                )
+
+            # Opposite-color head-on: first to leave eats the other.
+            if swap is not None and swap['piece'].color != piece.color:
+                if swap['order'] < order:
+                    # Opponent left first — they eat us.
+                    self._eliminate(piece, source)
+                    return source
+                # We left first — eat them, then land on their square.
+                self._eliminate(swap['piece'], swap['source'])
+
+            target = self.board.piece_at(dest)
+
+            # Ally on destination: stop on closest square before that meeting cell.
+            if target is not None and target.color == piece.color:
+                stop = last_square_before(source, dest, dest)
+                return self._settle_before_collision(
+                    piece, source, stop, abort_animation=False
+                )
+
+            if target is not None and target.color != piece.color:
+                target_machine = self.machines.get(target.id)
+                # Airborne jumper eats the attacker instead of being captured.
+                if target_machine is not None and target_machine.is_jumping:
+                    self._eliminate(piece, source)
+                    return source
+
+                self._eliminate(target, dest)
+
+            if piece.id not in self.machines:
+                return source
 
             new_kind = self.promotion.resolve(self.board, piece, dest)
             self.board.move_piece(source, dest, new_kind)
             piece.state = STATE_IDLE
             if new_kind is not None:
-                # Same machine continues rest; only sprites/config switch to new kind.
                 machine.assets = self.loader.load(piece.color, piece.kind)
-            machine.place_at_cell(dest.row, dest.col, self.cell_size)
+            return None
 
         piece.state = 'moving'
         machine.start_move(source, destination, self.cell_size, on_arrived=on_arrived)

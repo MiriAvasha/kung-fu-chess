@@ -29,8 +29,6 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-                elif event.key == pygame.K_j:
-                    controller.jump_selected()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 controller.click(*event.pos)
 

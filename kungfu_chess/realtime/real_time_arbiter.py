@@ -1,8 +1,8 @@
-import constants
 from model.game_state import GameState
 from model.position import Position
 from realtime.jump import Jump
 from realtime.motion import Motion
+from rules.path_utils import last_square_before, last_squares_before_head_on
 from rules.promotion import DEFAULT_PROMOTION_SERVICE
 
 
@@ -25,6 +25,10 @@ def _is_mutual_swap(motion: Motion, other: Motion) -> bool:
         (motion.to_row, motion.to_col) == (other.from_row, other.from_col)
         and (other.to_row, other.to_col) == (motion.from_row, motion.from_col)
     )
+
+
+def _is_same_destination(motion: Motion, other: Motion) -> bool:
+    return (motion.to_row, motion.to_col) == (other.to_row, other.to_col)
 
 
 def _is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, other: Motion) -> bool:
@@ -105,6 +109,19 @@ class RealTimeArbiter:
         for key in expired:
             del self.active_jumps[key]
 
+    def _stop_at(self, game_state: GameState, motion: Motion, stop: Position):
+        """Settle a piece on the closest square reached before a same-color collision."""
+        source = Position(motion.from_row, motion.from_col)
+        if stop == source:
+            return
+        if game_state.board.piece_at(stop) is not None:
+            return
+        moving_piece = game_state.board.piece_at(source)
+        if moving_piece is None:
+            return
+        new_kind = DEFAULT_PROMOTION_SERVICE.resolve(game_state.board, moving_piece, stop)
+        game_state.board.move_piece(source, stop, new_kind)
+
     def _apply_motion(self, game_state: GameState, motion: Motion) -> bool:
         airborne = self._is_airborne_at(motion.to_row, motion.to_col)
         if airborne and airborne.piece_token[0] != motion.piece_token[0]:
@@ -118,15 +135,28 @@ class RealTimeArbiter:
 
         source = Position(motion.from_row, motion.from_col)
         destination = Position(motion.to_row, motion.to_col)
-        captured = game_state.board.piece_at(destination)
-        moving_piece = game_state.board.piece_at(source)
-        new_kind = None
-        if moving_piece is not None:
-            new_kind = DEFAULT_PROMOTION_SERVICE.resolve(game_state.board, moving_piece, destination)
+        occupant = game_state.board.piece_at(destination)
 
+        # Same-color collision: never capture an ally.
+        # Stop on the closest square reached before the meeting square.
+        if occupant is not None and occupant.color == motion.piece_token[0]:
+            stop = last_square_before(source, destination, destination)
+            self._stop_at(game_state, motion, stop)
+            return False
+
+        moving_piece = game_state.board.piece_at(source)
+        if moving_piece is None:
+            return False
+
+        # Opposite-color capture: remove the loser and cancel its in-flight motion.
+        if occupant is not None:
+            game_state.board.remove_piece(destination)
+            self.active_motions.pop((destination.row, destination.col), None)
+
+        new_kind = DEFAULT_PROMOTION_SERVICE.resolve(game_state.board, moving_piece, destination)
         game_state.board.move_piece(source, destination, new_kind)
 
-        if captured is not None and captured.kind == 'K':
+        if occupant is not None and occupant.kind == 'K':
             game_state.game_over = True
             self.active_motions.clear()
             return True
@@ -141,8 +171,11 @@ class RealTimeArbiter:
         if not due_motions:
             return
 
+        # First to start (start_time, then order) is resolved first.
         due_motions.sort(key=lambda move: (move.start_time, move.order))
         cancelled = set()
+        same_color_stops = {}
+
         for i, motion in enumerate(due_motions):
             if i in cancelled:
                 continue
@@ -150,18 +183,43 @@ class RealTimeArbiter:
                 if j in cancelled:
                     continue
                 other = due_motions[j]
-                if not _is_mutual_swap(motion, other):
-                    continue
-                if motion.piece_token[0] == other.piece_token[0]:
+                same_color = motion.piece_token[0] == other.piece_token[0]
+                head_on = _is_mutual_swap(motion, other)
+                same_dest = _is_same_destination(motion, other)
+
+                # Same-color collision: both stop on last square before they meet.
+                if same_color and head_on:
+                    src_a = Position(motion.from_row, motion.from_col)
+                    dst_a = Position(motion.to_row, motion.to_col)
+                    src_b = Position(other.from_row, other.from_col)
+                    dst_b = Position(other.to_row, other.to_col)
+                    stop_a, stop_b = last_squares_before_head_on(src_a, dst_a, src_b, dst_b)
+                    same_color_stops[i] = stop_a
+                    same_color_stops[j] = stop_b
                     cancelled.add(i)
                     cancelled.add(j)
-                else:
+                    continue
+
+                if same_color and same_dest:
+                    src_a = Position(motion.from_row, motion.from_col)
+                    dst = Position(motion.to_row, motion.to_col)
+                    src_b = Position(other.from_row, other.from_col)
+                    same_color_stops[i] = last_square_before(src_a, dst, dst)
+                    same_color_stops[j] = last_square_before(src_b, dst, dst)
+                    cancelled.add(i)
+                    cancelled.add(j)
+                    continue
+
+                # Opposite-color head-on: first to leave eats the other.
+                if head_on and not same_color:
                     cancelled.add(j)
 
         for i, motion in enumerate(due_motions):
             if game_state.game_over:
                 break
-            if i not in cancelled:
+            if i in same_color_stops:
+                self._stop_at(game_state, motion, same_color_stops[i])
+            elif i not in cancelled:
                 self._apply_motion(game_state, motion)
 
         self._expire_due_jumps()

@@ -8,8 +8,9 @@ DARK = (181, 136, 99)
 SELECT = (246, 246, 105)
 LEGAL = (100, 200, 100)
 LEGAL_CAPTURE = (220, 80, 80)
-REST_YELLOW = (255, 220, 40)
-REST_OVERLAY = (255, 230, 80, 140)
+REST_YELLOW = (255, 255, 120, 220)
+JUMP_GLOW = (120, 220, 255, 160)
+JUMP_RING = (80, 200, 255)
 TEAM_WHITE = (255, 245, 210)
 TEAM_BLACK = (70, 110, 170)
 TEAM_RING_WHITE = (255, 230, 150)
@@ -41,6 +42,21 @@ class BoardView:
         tinted.blit(color_layer, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         self._tint_cache[key] = tinted
         return tinted
+
+    def _draw_rest_drain(self, surface, cell, rest_progress: float):
+        """Yellow fills the cell; remaining yellow sits at the bottom and shrinks downward."""
+        remaining = max(0.0, 1.0 - rest_progress)
+        if remaining <= 0.0:
+            return
+        height = int(round(self.cell_size * remaining))
+        if height <= 0:
+            return
+        cell_x = cell.col * self.cell_size
+        cell_y = cell.row * self.cell_size
+        yellow = pygame.Surface((self.cell_size, height), pygame.SRCALPHA)
+        yellow.fill(REST_YELLOW)
+        # Align to bottom of the logical square so yellow drains top -> bottom.
+        surface.blit(yellow, (cell_x, cell_y + self.cell_size - height))
 
     def draw(
         self,
@@ -78,6 +94,19 @@ class BoardView:
                 center = rect.center
                 pygame.draw.circle(surface, marker_color, center, self.cell_size // 8)
 
+        # Rest yellow on logical cells, under the pieces.
+        for piece in board.all_pieces():
+            machine = machines.get(piece.id)
+            if machine is not None and machine.is_resting:
+                self._draw_rest_drain(surface, piece.cell, machine.rest_progress)
+            if machine is not None and machine.is_jumping:
+                glow = pygame.Surface((self.cell_size, self.cell_size), pygame.SRCALPHA)
+                glow.fill(JUMP_GLOW)
+                surface.blit(
+                    glow,
+                    (piece.cell.col * self.cell_size, piece.cell.row * self.cell_size),
+                )
+
         for piece in board.all_pieces():
             machine = machines.get(piece.id)
             if machine is None:
@@ -87,7 +116,9 @@ class BoardView:
                 continue
 
             team_color = TEAM_WHITE if piece.color == 'w' else TEAM_BLACK
-            ring_color = TEAM_RING_WHITE if piece.color == 'w' else TEAM_RING_BLACK
+            ring_color = JUMP_RING if machine.is_jumping else (
+                TEAM_RING_WHITE if piece.color == 'w' else TEAM_RING_BLACK
+            )
             draw_x = int(machine.pixel_x)
             draw_y = int(machine.pixel_y)
             center = (draw_x + self.cell_size // 2, draw_y + self.cell_size // 2)
@@ -96,22 +127,10 @@ class BoardView:
             tinted = self._tinted_sprite(sprite, team_color)
             surface.blit(tinted, (draw_x, draw_y))
 
-            if machine.is_resting:
-                overlay = pygame.Surface((self.cell_size, self.cell_size), pygame.SRCALPHA)
-                overlay.fill(REST_OVERLAY)
-                surface.blit(overlay, (draw_x, draw_y))
-                remaining_s = machine.rest_remaining_ms / 1000.0
-                text = self.font.render('{:.1f}s'.format(remaining_s), True, (40, 40, 0))
-                text_rect = text.get_rect(center=center)
-                surface.blit(text, text_rect)
-
-                bar_w = self.cell_size - 16
-                bar_h = 8
-                bar_x = draw_x + 8
-                bar_y = draw_y + self.cell_size - 14
-                pygame.draw.rect(surface, (80, 80, 20), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
-                fill_w = int(bar_w * (1.0 - machine.rest_progress))
-                pygame.draw.rect(surface, REST_YELLOW, (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+            if machine.is_jumping:
+                label = self.small_font.render('JUMP', True, (20, 60, 90))
+                label_rect = label.get_rect(midtop=(center[0], draw_y + 4))
+                surface.blit(label, label_rect)
 
         if game_over:
             overlay = pygame.Surface((board.width * self.cell_size, board.height * self.cell_size), pygame.SRCALPHA)
@@ -125,9 +144,9 @@ class BoardView:
 
         help_lines = [
             'Click piece = select + show legal moves',
-            'Click green/red square = move | J = jump | ESC = quit',
-            'Yellow = resting | Cream ring = White | Blue ring = Black',
-            'Idle pieces gently breathe up and down',
+            'Click same square again = JUMP | green/red = move | ESC = quit',
+            'Bright yellow cell = resting (drains top to bottom)',
+            'Cyan jump = airborne; attacker landing there is eaten',
         ]
         y = board.height * self.cell_size + 8
         for line in help_lines:
