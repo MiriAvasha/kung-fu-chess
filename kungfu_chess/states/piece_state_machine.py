@@ -1,0 +1,135 @@
+STATE_IDLE = 'idle'
+STATE_MOVE = 'move'
+STATE_JUMP = 'jump'
+STATE_SHORT_REST = 'short_rest'
+STATE_LONG_REST = 'long_rest'
+
+REST_STATES = {STATE_SHORT_REST, STATE_LONG_REST}
+BUSY_STATES = {STATE_MOVE, STATE_JUMP, STATE_SHORT_REST, STATE_LONG_REST}
+
+
+class PieceStateMachine:
+    def __init__(self, assets):
+        self.assets = assets
+        self.state = STATE_IDLE
+        self.elapsed_ms = 0
+        self.duration_ms = 0
+        self.from_pos = None
+        self.to_pos = None
+        self.pixel_x = 0.0
+        self.pixel_y = 0.0
+        self._on_arrived = None
+
+    @property
+    def is_idle(self) -> bool:
+        return self.state == STATE_IDLE
+
+    @property
+    def is_resting(self) -> bool:
+        return self.state in REST_STATES
+
+    @property
+    def is_busy(self) -> bool:
+        return self.state in BUSY_STATES
+
+    @property
+    def rest_remaining_ms(self) -> int:
+        if not self.is_resting:
+            return 0
+        return max(0, self.duration_ms - self.elapsed_ms)
+
+    @property
+    def rest_progress(self) -> float:
+        if not self.is_resting or self.duration_ms <= 0:
+            return 0.0
+        return min(1.0, self.elapsed_ms / float(self.duration_ms))
+
+    def place_at_cell(self, row: int, col: int, cell_size: int):
+        self.pixel_x = col * cell_size
+        self.pixel_y = row * cell_size
+
+    def start_move(self, from_pos, to_pos, cell_size: int, on_arrived=None):
+        state_assets = self.assets.get_state(STATE_MOVE)
+        if state_assets is None:
+            return False
+        cells = max(abs(to_pos.row - from_pos.row), abs(to_pos.col - from_pos.col), 1)
+        speed = state_assets.speed_m_per_sec or 1.0
+        self.state = STATE_MOVE
+        self.elapsed_ms = 0
+        self.duration_ms = int(round(cells / speed * 1000))
+        self.from_pos = from_pos
+        self.to_pos = to_pos
+        self.place_at_cell(from_pos.row, from_pos.col, cell_size)
+        self._on_arrived = on_arrived
+        return True
+
+    def start_jump(self, cell, cell_size: int, on_arrived=None):
+        state_assets = self.assets.get_state(STATE_JUMP)
+        if state_assets is None:
+            return False
+        self.state = STATE_JUMP
+        self.elapsed_ms = 0
+        self.duration_ms = state_assets.animation_duration_ms
+        self.from_pos = cell
+        self.to_pos = cell
+        self.place_at_cell(cell.row, cell.col, cell_size)
+        self._on_arrived = on_arrived
+        return True
+
+    def tick(self, dt_ms: int, cell_size: int):
+        if self.state == STATE_IDLE:
+            return
+
+        self.elapsed_ms += dt_ms
+        state_assets = self.assets.get_state(self.state)
+
+        if self.state in (STATE_MOVE, STATE_JUMP) and self.from_pos and self.to_pos:
+            progress = 1.0 if self.duration_ms <= 0 else min(1.0, self.elapsed_ms / float(self.duration_ms))
+            start_x = self.from_pos.col * cell_size
+            start_y = self.from_pos.row * cell_size
+            end_x = self.to_pos.col * cell_size
+            end_y = self.to_pos.row * cell_size
+            self.pixel_x = start_x + (end_x - start_x) * progress
+            self.pixel_y = start_y + (end_y - start_y) * progress
+
+        if self.elapsed_ms >= self.duration_ms:
+            self._finish_state(state_assets, cell_size)
+
+    def _finish_state(self, state_assets, cell_size: int):
+        next_state = state_assets.next_state if state_assets else STATE_IDLE
+
+        if self.state in (STATE_MOVE, STATE_JUMP) and self.to_pos is not None:
+            if self._on_arrived is not None:
+                self._on_arrived(self.to_pos)
+                self._on_arrived = None
+            self.place_at_cell(self.to_pos.row, self.to_pos.col, cell_size)
+
+        if next_state in REST_STATES:
+            rest_assets = self.assets.get_state(next_state)
+            self.state = next_state
+            self.elapsed_ms = 0
+            self.duration_ms = rest_assets.animation_duration_ms if rest_assets else 500
+            self.from_pos = None
+            self.to_pos = None
+            return
+
+        self.state = STATE_IDLE
+        self.elapsed_ms = 0
+        self.duration_ms = 0
+        self.from_pos = None
+        self.to_pos = None
+
+    def current_sprite(self):
+        state_assets = self.assets.get_state(self.state)
+        if state_assets is None or not state_assets.sprites:
+            idle = self.assets.get_state(STATE_IDLE)
+            if idle and idle.sprites:
+                return idle.sprites[0]
+            return None
+        fps = state_assets.frames_per_sec or 1.0
+        frame_index = int(self.elapsed_ms / 1000.0 * fps)
+        if state_assets.is_loop:
+            frame_index %= len(state_assets.sprites)
+        else:
+            frame_index = min(frame_index, len(state_assets.sprites) - 1)
+        return state_assets.sprites[frame_index]
