@@ -6,8 +6,8 @@ import pygame
 
 
 def asset_folder_for(color: str, kind: str) -> str:
-    color_letter = 'W' if color == 'w' else 'B'
-    return kind + color_letter
+    # folders look like wP, bK, wR ...
+    return color + kind
 
 
 class StateAssets:
