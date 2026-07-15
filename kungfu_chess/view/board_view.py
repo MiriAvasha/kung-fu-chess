@@ -10,6 +10,10 @@ LEGAL = (100, 200, 100)
 LEGAL_CAPTURE = (220, 80, 80)
 REST_YELLOW = (255, 220, 40)
 REST_OVERLAY = (255, 230, 80, 140)
+TEAM_WHITE = (255, 245, 210)
+TEAM_BLACK = (70, 110, 170)
+TEAM_RING_WHITE = (255, 230, 150)
+TEAM_RING_BLACK = (40, 70, 130)
 
 
 class BoardView:
@@ -17,11 +21,26 @@ class BoardView:
         self.cell_size = cell_size
         self.font = None
         self.small_font = None
+        self.big_font = None
+        self._tint_cache = {}
 
     def ensure_fonts(self):
         if self.font is None:
             self.font = pygame.font.SysFont('arial', 18, bold=True)
             self.small_font = pygame.font.SysFont('arial', 14, bold=True)
+            self.big_font = pygame.font.SysFont('arial', 54, bold=True)
+
+    def _tinted_sprite(self, sprite, color):
+        key = (id(sprite), color)
+        cached = self._tint_cache.get(key)
+        if cached is not None:
+            return cached
+        tinted = sprite.copy()
+        color_layer = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+        color_layer.fill(color + (255,))
+        tinted.blit(color_layer, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self._tint_cache[key] = tinted
+        return tinted
 
     def draw(
         self,
@@ -30,6 +49,7 @@ class BoardView:
         machines,
         selected_cell=None,
         legal_destinations=None,
+        game_over=False,
     ):
         self.ensure_fonts()
         legal_destinations = legal_destinations or set()
@@ -65,35 +85,49 @@ class BoardView:
             sprite = machine.current_sprite()
             if sprite is None:
                 continue
-            surface.blit(sprite, (int(machine.pixel_x), int(machine.pixel_y)))
+
+            team_color = TEAM_WHITE if piece.color == 'w' else TEAM_BLACK
+            ring_color = TEAM_RING_WHITE if piece.color == 'w' else TEAM_RING_BLACK
+            draw_x = int(machine.pixel_x)
+            draw_y = int(machine.pixel_y)
+            center = (draw_x + self.cell_size // 2, draw_y + self.cell_size // 2)
+            pygame.draw.circle(surface, ring_color, center, self.cell_size // 2 - 4, 3)
+
+            tinted = self._tinted_sprite(sprite, team_color)
+            surface.blit(tinted, (draw_x, draw_y))
 
             if machine.is_resting:
                 overlay = pygame.Surface((self.cell_size, self.cell_size), pygame.SRCALPHA)
                 overlay.fill(REST_OVERLAY)
-                surface.blit(overlay, (int(machine.pixel_x), int(machine.pixel_y)))
+                surface.blit(overlay, (draw_x, draw_y))
                 remaining_s = machine.rest_remaining_ms / 1000.0
                 text = self.font.render('{:.1f}s'.format(remaining_s), True, (40, 40, 0))
-                text_rect = text.get_rect(
-                    center=(
-                        int(machine.pixel_x) + self.cell_size // 2,
-                        int(machine.pixel_y) + self.cell_size // 2,
-                    )
-                )
+                text_rect = text.get_rect(center=center)
                 surface.blit(text, text_rect)
 
                 bar_w = self.cell_size - 16
                 bar_h = 8
-                bar_x = int(machine.pixel_x) + 8
-                bar_y = int(machine.pixel_y) + self.cell_size - 14
+                bar_x = draw_x + 8
+                bar_y = draw_y + self.cell_size - 14
                 pygame.draw.rect(surface, (80, 80, 20), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
                 fill_w = int(bar_w * (1.0 - machine.rest_progress))
                 pygame.draw.rect(surface, REST_YELLOW, (bar_x, bar_y, fill_w, bar_h), border_radius=3)
 
+        if game_over:
+            overlay = pygame.Surface((board.width * self.cell_size, board.height * self.cell_size), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 160))
+            surface.blit(overlay, (0, 0))
+            label = self.big_font.render('Game Over', True, (255, 230, 80))
+            label_rect = label.get_rect(
+                center=(board.width * self.cell_size // 2, board.height * self.cell_size // 2)
+            )
+            surface.blit(label, label_rect)
+
         help_lines = [
             'Click piece = select + show legal moves',
-            'Click green/red square = move',
-            'J = jump selected piece | ESC = quit',
-            'Yellow = resting (cooldown)',
+            'Click green/red square = move | J = jump | ESC = quit',
+            'Yellow = resting | Cream ring = White | Blue ring = Black',
+            'Idle pieces gently breathe up and down',
         ]
         y = board.height * self.cell_size + 8
         for line in help_lines:

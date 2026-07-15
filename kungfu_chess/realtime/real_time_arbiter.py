@@ -3,6 +3,7 @@ from model.game_state import GameState
 from model.position import Position
 from realtime.jump import Jump
 from realtime.motion import Motion
+from rules.promotion import DEFAULT_PROMOTION_SERVICE
 
 
 def _get_route_columns(from_col: int, to_col: int) -> set:
@@ -118,12 +119,10 @@ class RealTimeArbiter:
         source = Position(motion.from_row, motion.from_col)
         destination = Position(motion.to_row, motion.to_col)
         captured = game_state.board.piece_at(destination)
+        moving_piece = game_state.board.piece_at(source)
         new_kind = None
-        if motion.piece_token[1] == 'P':
-            if motion.piece_token[0] == 'w' and motion.to_row == 0:
-                new_kind = 'Q'
-            elif motion.piece_token[0] == 'b' and motion.to_row == game_state.board.height - 1:
-                new_kind = 'Q'
+        if moving_piece is not None:
+            new_kind = DEFAULT_PROMOTION_SERVICE.resolve(game_state.board, moving_piece, destination)
 
         game_state.board.move_piece(source, destination, new_kind)
 

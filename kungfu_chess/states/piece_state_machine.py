@@ -1,3 +1,5 @@
+import math
+
 STATE_IDLE = 'idle'
 STATE_MOVE = 'move'
 STATE_JUMP = 'jump'
@@ -7,6 +9,9 @@ STATE_LONG_REST = 'long_rest'
 REST_STATES = {STATE_SHORT_REST, STATE_LONG_REST}
 BUSY_STATES = {STATE_MOVE, STATE_JUMP, STATE_SHORT_REST, STATE_LONG_REST}
 
+BREATH_AMPLITUDE_PX = 3.0
+BREATH_PERIOD_MS = 1400.0
+
 
 class PieceStateMachine:
     def __init__(self, assets):
@@ -14,10 +19,13 @@ class PieceStateMachine:
         self.state = STATE_IDLE
         self.elapsed_ms = 0
         self.duration_ms = 0
+        self.idle_ms = 0
         self.from_pos = None
         self.to_pos = None
         self.pixel_x = 0.0
         self.pixel_y = 0.0
+        self.base_pixel_x = 0.0
+        self.base_pixel_y = 0.0
         self._on_arrived = None
 
     @property
@@ -45,8 +53,10 @@ class PieceStateMachine:
         return min(1.0, self.elapsed_ms / float(self.duration_ms))
 
     def place_at_cell(self, row: int, col: int, cell_size: int):
-        self.pixel_x = col * cell_size
-        self.pixel_y = row * cell_size
+        self.base_pixel_x = col * cell_size
+        self.base_pixel_y = row * cell_size
+        self.pixel_x = self.base_pixel_x
+        self.pixel_y = self.base_pixel_y
 
     def start_move(self, from_pos, to_pos, cell_size: int, on_arrived=None):
         state_assets = self.assets.get_state(STATE_MOVE)
@@ -56,6 +66,7 @@ class PieceStateMachine:
         speed = state_assets.speed_m_per_sec or 1.0
         self.state = STATE_MOVE
         self.elapsed_ms = 0
+        self.idle_ms = 0
         self.duration_ms = int(round(cells / speed * 1000))
         self.from_pos = from_pos
         self.to_pos = to_pos
@@ -69,6 +80,7 @@ class PieceStateMachine:
             return False
         self.state = STATE_JUMP
         self.elapsed_ms = 0
+        self.idle_ms = 0
         self.duration_ms = state_assets.animation_duration_ms
         self.from_pos = cell
         self.to_pos = cell
@@ -78,6 +90,10 @@ class PieceStateMachine:
 
     def tick(self, dt_ms: int, cell_size: int):
         if self.state == STATE_IDLE:
+            self.idle_ms += dt_ms
+            bob = math.sin(self.idle_ms / BREATH_PERIOD_MS * math.pi * 2.0) * BREATH_AMPLITUDE_PX
+            self.pixel_x = self.base_pixel_x
+            self.pixel_y = self.base_pixel_y + bob
             return
 
         self.elapsed_ms += dt_ms
@@ -89,8 +105,10 @@ class PieceStateMachine:
             start_y = self.from_pos.row * cell_size
             end_x = self.to_pos.col * cell_size
             end_y = self.to_pos.row * cell_size
-            self.pixel_x = start_x + (end_x - start_x) * progress
-            self.pixel_y = start_y + (end_y - start_y) * progress
+            self.base_pixel_x = start_x + (end_x - start_x) * progress
+            self.base_pixel_y = start_y + (end_y - start_y) * progress
+            self.pixel_x = self.base_pixel_x
+            self.pixel_y = self.base_pixel_y
 
         if self.elapsed_ms >= self.duration_ms:
             self._finish_state(state_assets, cell_size)
@@ -116,11 +134,19 @@ class PieceStateMachine:
         self.state = STATE_IDLE
         self.elapsed_ms = 0
         self.duration_ms = 0
+        self.idle_ms = 0
         self.from_pos = None
         self.to_pos = None
 
     def current_sprite(self):
         state_assets = self.assets.get_state(self.state)
+        if self.state == STATE_IDLE:
+            idle = self.assets.get_state(STATE_IDLE)
+            if idle is None or not idle.sprites:
+                return None
+            fps = idle.frames_per_sec or 1.0
+            frame_index = int(self.idle_ms / 1000.0 * fps) % len(idle.sprites)
+            return idle.sprites[frame_index]
         if state_assets is None or not state_assets.sprites:
             idle = self.assets.get_state(STATE_IDLE)
             if idle and idle.sprites:
