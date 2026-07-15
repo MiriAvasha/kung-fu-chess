@@ -1,6 +1,6 @@
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Piece
-from kungfu_chess.rules.helpers import collect_sliding_destinations
+from model.board import Board
+from model.piece import Piece
+from rules.helpers import collect_sliding_destinations
 
 
 class BishopRule:

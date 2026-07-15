@@ -1,7 +1,7 @@
-from kungfu_chess import constants
-from kungfu_chess.engine.game_engine import GameEngine
-from kungfu_chess.input.board_mapper import BoardMapper
-from kungfu_chess.model.position import Position
+import constants
+from engine.game_engine import GameEngine
+from input.board_mapper import BoardMapper
+from model.position import Position
 
 
 class Controller:

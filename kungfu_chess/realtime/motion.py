@@ -1,4 +1,4 @@
-from kungfu_chess import constants
+import constants
 
 
 class Motion:

@@ -1,5 +1,5 @@
-from kungfu_chess import constants
-from kungfu_chess.model.position import Position
+import constants
+from model.position import Position
 
 
 class BoardMapper:

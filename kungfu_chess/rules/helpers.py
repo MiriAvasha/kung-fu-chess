@@ -1,6 +1,6 @@
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Piece
-from kungfu_chess.model.position import Position
+from model.board import Board
+from model.piece import Piece
+from model.position import Position
 
 
 def collect_sliding_destinations(board: Board, piece: Piece, row_step: int, col_step: int) -> set:

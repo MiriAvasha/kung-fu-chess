@@ -1,8 +1,8 @@
 import sys
 
-from kungfu_chess import constants
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.game_state import GameState
+import constants
+from model.board import board_from_token_rows
+from model.game_state import GameState
 
 
 class BoardParser:
@@ -13,7 +13,7 @@ class BoardParser:
     def add_row(self, row_str: str) -> GameState:
         tokens = row_str.strip().split()
         if not tokens:
-            return GameState(Board.from_token_rows(self._rows))
+            return GameState(board_from_token_rows(self._rows))
 
         if self._width is None:
             self._width = len(tokens)
@@ -27,4 +27,4 @@ class BoardParser:
                 sys.exit(0)
 
         self._rows.append(tokens)
-        return GameState(Board.from_token_rows(self._rows))
+        return GameState(board_from_token_rows(self._rows))

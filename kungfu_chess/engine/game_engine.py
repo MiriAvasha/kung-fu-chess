@@ -1,9 +1,9 @@
-from kungfu_chess import constants
-from kungfu_chess.engine.results import GameSnapshot, MoveResult
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.position import Position
-from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter
-from kungfu_chess.rules.rule_engine import RuleEngine
+import constants
+from engine.results import GameSnapshot, MoveResult
+from model.game_state import GameState
+from model.position import Position
+from realtime.real_time_arbiter import RealTimeArbiter
+from rules.rule_engine import RuleEngine
 
 
 class GameEngine:

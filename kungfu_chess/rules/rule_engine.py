@@ -1,7 +1,7 @@
-from kungfu_chess.engine.results import MoveValidation
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.position import Position
-from kungfu_chess.rules.piece_rules import PIECE_RULES
+from engine.results import MoveValidation
+from model.board import Board
+from model.position import Position
+from rules.piece_rules import PIECE_RULES
 
 
 class RuleEngine:

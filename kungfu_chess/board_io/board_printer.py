@@ -1,4 +1,4 @@
-from kungfu_chess.model.game_state import GameState
+from model.game_state import GameState
 
 
 class BoardPrinter:

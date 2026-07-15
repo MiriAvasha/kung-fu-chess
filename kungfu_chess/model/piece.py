@@ -1,4 +1,4 @@
-from kungfu_chess.model.position import Position
+from model.position import Position
 
 
 class PieceState:

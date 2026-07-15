@@ -1,4 +1,4 @@
-from kungfu_chess.model.position import Position
-from kungfu_chess.model.piece import Piece, PieceState
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.game_state import GameState
+from model.position import Position
+from model.piece import Piece, PieceState
+from model.board import Board
+from model.game_state import GameState

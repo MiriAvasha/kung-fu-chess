@@ -1,8 +1,8 @@
 from typing import Dict, List, Optional, Tuple
 
-from kungfu_chess import constants
-from kungfu_chess.model.piece import Piece, PieceState
-from kungfu_chess.model.position import Position
+import constants
+from model.piece import Piece, PieceState
+from model.position import Position
 
 
 class Board:
@@ -46,16 +46,16 @@ class Board:
             grid[piece.cell.row][piece.cell.col] = piece.token
         return grid
 
-    @staticmethod
-    def from_token_rows(rows: List[List[str]]) -> 'Board':
-        Piece._next_id = 1
-        board = Board()
-        if not rows:
-            return board
-        board.height = len(rows)
-        board.width = len(rows[0])
-        for row_idx, row in enumerate(rows):
-            for col_idx, token in enumerate(row):
-                if token != constants.EMPTY_CELL:
-                    board.add_piece(Piece(token[0], token[1], Position(row_idx, col_idx)))
+
+def board_from_token_rows(rows: List[List[str]]) -> Board:
+    Piece._next_id = 1
+    board = Board()
+    if not rows:
         return board
+    board.height = len(rows)
+    board.width = len(rows[0])
+    for row_idx, row in enumerate(rows):
+        for col_idx, token in enumerate(row):
+            if token != constants.EMPTY_CELL:
+                board.add_piece(Piece(token[0], token[1], Position(row_idx, col_idx)))
+    return board

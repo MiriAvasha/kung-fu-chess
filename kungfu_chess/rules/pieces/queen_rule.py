@@ -1,7 +1,7 @@
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Piece
-from kungfu_chess.rules.pieces.bishop_rule import BishopRule
-from kungfu_chess.rules.pieces.rook_rule import RookRule
+from model.board import Board
+from model.piece import Piece
+from rules.pieces.bishop_rule import BishopRule
+from rules.pieces.rook_rule import RookRule
 
 
 class QueenRule:

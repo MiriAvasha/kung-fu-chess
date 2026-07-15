@@ -1,8 +1,8 @@
-from kungfu_chess import constants
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.position import Position
-from kungfu_chess.realtime.jump import Jump
-from kungfu_chess.realtime.motion import Motion
+import constants
+from model.game_state import GameState
+from model.position import Position
+from realtime.jump import Jump
+from realtime.motion import Motion
 
 
 def _get_route_columns(from_col: int, to_col: int) -> set:
@@ -17,6 +17,22 @@ def _get_route_rows(from_row: int, to_row: int) -> set:
         return set()
     lo, hi = min(from_row, to_row), max(from_row, to_row)
     return set(range(lo + 1, hi + 1))
+
+
+def _is_mutual_swap(motion: Motion, other: Motion) -> bool:
+    return (
+        (motion.to_row, motion.to_col) == (other.from_row, other.from_col)
+        and (other.to_row, other.to_col) == (motion.from_row, motion.from_col)
+    )
+
+
+def _is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, other: Motion) -> bool:
+    if other.piece_token[0] == piece_color:
+        return False
+    return (
+        (to_row, to_col) == (other.from_row, other.from_col)
+        and (other.to_row, other.to_col) == (from_row, from_col)
+    )
 
 
 class RealTimeArbiter:
@@ -55,7 +71,7 @@ class RealTimeArbiter:
         for active in self.active_motions.values():
             if active.piece_token[0] == piece_color:
                 continue
-            if self._is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, active):
+            if _is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, active):
                 continue
             new_cols = _get_route_columns(from_col, to_col)
             new_rows = _get_route_rows(from_row, to_row)
@@ -76,15 +92,6 @@ class RealTimeArbiter:
             if same_col_vertical and new_rows & active_rows:
                 return True
         return False
-
-    @staticmethod
-    def _is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, other: Motion) -> bool:
-        if other.piece_token[0] == piece_color:
-            return False
-        return (
-            (to_row, to_col) == (other.from_row, other.from_col)
-            and (other.to_row, other.to_col) == (from_row, from_col)
-        )
 
     def _is_airborne_at(self, row: int, col: int):
         jump = self.active_jumps.get((row, col))
@@ -144,12 +151,12 @@ class RealTimeArbiter:
                 if j in cancelled:
                     continue
                 other = due_motions[j]
-                if motion.piece_token[0] == other.piece_token[0]:
+                if not _is_mutual_swap(motion, other):
                     continue
-                if (
-                    (motion.to_row, motion.to_col) == (other.from_row, other.from_col)
-                    and (other.to_row, other.to_col) == (motion.from_row, motion.from_col)
-                ):
+                if motion.piece_token[0] == other.piece_token[0]:
+                    cancelled.add(i)
+                    cancelled.add(j)
+                else:
                     cancelled.add(j)
 
         for i, motion in enumerate(due_motions):

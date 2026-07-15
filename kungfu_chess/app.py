@@ -1,12 +1,12 @@
 import sys
 
-from kungfu_chess.engine.game_engine import GameEngine
-from kungfu_chess.input.controller import Controller
-from kungfu_chess.io.board_printer import BoardPrinter
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter
-from kungfu_chess.rules.rule_engine import RuleEngine
-from kungfu_chess.texttests.script_runner import ScriptRunner
+from engine.game_engine import GameEngine
+from input.controller import Controller
+from board_io.board_printer import BoardPrinter
+from model.game_state import GameState
+from realtime.real_time_arbiter import RealTimeArbiter
+from rules.rule_engine import RuleEngine
+from texttests.script_runner import ScriptRunner
 
 
 def main():
@@ -18,3 +18,7 @@ def main():
     printer = BoardPrinter()
     runner = ScriptRunner(engine, controller, printer)
     runner.run(sys.stdin)
+
+
+if __name__ == '__main__':
+    main()

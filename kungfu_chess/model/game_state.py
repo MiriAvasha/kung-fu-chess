@@ -1,6 +1,6 @@
 from typing import Optional
 
-from kungfu_chess.model.board import Board
+from model.board import Board
 
 
 class GameState:
