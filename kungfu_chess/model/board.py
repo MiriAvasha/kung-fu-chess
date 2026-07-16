@@ -14,6 +14,11 @@ class Board:
     def is_inside(self, position: Position) -> bool:
         return 0 <= position.row < self.height and 0 <= position.col < self.width
 
+    def get_pawn_start_row(self, color: str) -> int:
+        if color == 'w':
+            return self.height - 1 - constants.PAWN_START_ROW_OFFSET
+        return constants.PAWN_START_ROW_OFFSET
+
     def piece_at(self, position: Position):
         return self._cells.get((position.row, position.col))
 

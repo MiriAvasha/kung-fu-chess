@@ -5,6 +5,10 @@ CELL_SIZE = 100
 MS_PER_CELL = 1000
 JUMP_DURATION = 1000
 
+PAWN_FORWARD = {'w': -1, 'b': 1}
+# כמה שורות מהקצה הרגלי יכול לבצע צעד כפול
+PAWN_START_ROW_OFFSET = 1
+
 PIECE_SPEEDS = {
     'P': 1000,
     'R': 1000,

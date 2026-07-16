@@ -2,7 +2,7 @@ from model.board import Board
 from model.piece import Piece
 from rules.helpers import collect_sliding_destinations
 
-
+# צריח רק ישר לכל הכיוונים
 class RookRule:
     def legal_destinations(self, board: Board, piece: Piece) -> set:
         destinations = set()
