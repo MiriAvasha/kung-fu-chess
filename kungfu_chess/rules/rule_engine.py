@@ -1,7 +1,7 @@
 from engine.results import MoveValidation
 from model.board import Board
 from model.position import Position
-from rules.piece_rules import PIECE_RULES
+from .piece_rules import PIECE_RULES
 
 
 class RuleEngine:

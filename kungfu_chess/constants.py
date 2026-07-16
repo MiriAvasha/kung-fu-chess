@@ -1,6 +1,9 @@
+from typing import Literal, get_args
+
 EMPTY_CELL = '.'
 VALID_COLORS = {'w', 'b'}
-VALID_PIECES = {'K', 'Q', 'R', 'B', 'N', 'P'}
+PieceKind = Literal['K', 'Q', 'R', 'B', 'N', 'P']
+VALID_PIECES = frozenset(get_args(PieceKind))
 CELL_SIZE = 100
 MS_PER_CELL = 1000
 JUMP_DURATION = 1000
