@@ -10,11 +10,8 @@ LEGAL = (100, 200, 100)
 LEGAL_CAPTURE = (220, 80, 80)
 REST_YELLOW = (255, 255, 120, 220)
 JUMP_GLOW = (120, 220, 255, 160)
-JUMP_RING = (80, 200, 255)
 TEAM_WHITE = (255, 245, 210)
 TEAM_BLACK = (70, 110, 170)
-TEAM_RING_WHITE = (255, 230, 150)
-TEAM_RING_BLACK = (40, 70, 130)
 
 
 class BoardView:
@@ -116,18 +113,14 @@ class BoardView:
                 continue
 
             team_color = TEAM_WHITE if piece.color == 'w' else TEAM_BLACK
-            ring_color = JUMP_RING if machine.is_jumping else (
-                TEAM_RING_WHITE if piece.color == 'w' else TEAM_RING_BLACK
-            )
             draw_x = int(machine.pixel_x)
             draw_y = int(machine.pixel_y)
-            center = (draw_x + self.cell_size // 2, draw_y + self.cell_size // 2)
-            pygame.draw.circle(surface, ring_color, center, self.cell_size // 2 - 4, 3)
 
             tinted = self._tinted_sprite(sprite, team_color)
             surface.blit(tinted, (draw_x, draw_y))
 
             if machine.is_jumping:
+                center = (draw_x + self.cell_size // 2, draw_y + self.cell_size // 2)
                 label = self.small_font.render('JUMP', True, (20, 60, 90))
                 label_rect = label.get_rect(midtop=(center[0], draw_y + 4))
                 surface.blit(label, label_rect)
@@ -147,6 +140,7 @@ class BoardView:
             'Click same square again = JUMP | green/red = move | ESC = quit',
             'Bright yellow cell = resting (drains top to bottom)',
             'Cyan jump = airborne; attacker landing there is eaten',
+            '- / = shrink or grow board size (clicks still map to cells)',
         ]
         y = board.height * self.cell_size + 8
         for line in help_lines:

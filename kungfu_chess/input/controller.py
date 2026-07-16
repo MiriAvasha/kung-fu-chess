@@ -5,13 +5,14 @@ from model.position import Position
 
 
 class Controller:
-    def __init__(self, engine: GameEngine):
+    def __init__(self, engine: GameEngine, cell_size: int = None):
         self.engine = engine
         self.selected_cell = None
+        self.cell_size = constants.CELL_SIZE if cell_size is None else cell_size
 
     def _mapper(self) -> BoardMapper:
         board = self.engine.game_state.board
-        return BoardMapper(board.width, board.height)
+        return BoardMapper(board.width, board.height, self.cell_size)
 
     def click(self, x: int, y: int):
         if self.engine.game_state.game_over:

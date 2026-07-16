@@ -1,6 +1,3 @@
-import constants
-
-
 class Motion:
     def __init__(self, piece_id, piece_token, from_row, from_col, to_row, to_col, start_time, duration, order):
         self.piece_id = piece_id
@@ -12,6 +9,10 @@ class Motion:
         self.start_time = start_time
         self.duration = duration
         self.order = order
+        # Original command — truncation only shortens the effective destination.
+        self.original_to_row = to_row
+        self.original_to_col = to_col
+        self.original_duration = duration
 
     @property
     def arrival_time(self) -> int:

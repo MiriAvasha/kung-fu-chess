@@ -2,7 +2,15 @@ from model.game_state import GameState
 from model.position import Position
 from realtime.jump import Jump
 from realtime.motion import Motion
-from rules.path_utils import last_square_before, last_squares_before_head_on
+from rules.path_utils import (
+    earlier_stop_along_path,
+    is_earlier_arrival,
+    last_square_before,
+    path_cells,
+    shared_path_cells,
+    time_to_leave_cell,
+    time_to_reach_cell,
+)
 from rules.promotion import DEFAULT_PROMOTION_SERVICE
 
 
@@ -27,10 +35,6 @@ def _is_mutual_swap(motion: Motion, other: Motion) -> bool:
     )
 
 
-def _is_same_destination(motion: Motion, other: Motion) -> bool:
-    return (motion.to_row, motion.to_col) == (other.to_row, other.to_col)
-
-
 def _is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, other: Motion) -> bool:
     if other.piece_token[0] == piece_color:
         return False
@@ -38,6 +42,18 @@ def _is_mutual_enemy_collision(from_row, from_col, to_row, to_col, piece_color, 
         (to_row, to_col) == (other.from_row, other.from_col)
         and (other.to_row, other.to_col) == (from_row, from_col)
     )
+
+
+def _motion_source(motion: Motion) -> Position:
+    return Position(motion.from_row, motion.from_col)
+
+
+def _motion_dest(motion: Motion) -> Position:
+    return Position(motion.to_row, motion.to_col)
+
+
+def _motion_original_dest(motion: Motion) -> Position:
+    return Position(motion.original_to_row, motion.original_to_col)
 
 
 class RealTimeArbiter:
@@ -55,7 +71,9 @@ class RealTimeArbiter:
 
     def advance_time(self, game_state: GameState, ms: int):
         self.current_time += ms
+        self._resolve_same_color_path_blocks(game_state)
         self._complete_due_motions(game_state)
+        self._resolve_same_color_path_blocks(game_state)
 
     def start_motion(self, game_state: GameState, from_row, from_col, to_row, to_col, piece_token, duration):
         self._move_order += 1
@@ -65,6 +83,7 @@ class RealTimeArbiter:
             piece_id, piece_token, from_row, from_col, to_row, to_col,
             self.current_time, duration, self._move_order
         )
+        self._resolve_same_color_path_blocks(game_state)
 
     def start_jump(self, game_state: GameState, row: int, col: int, piece_token: str):
         self.active_jumps[(row, col)] = Jump(piece_token, row, col, self.current_time)
@@ -109,9 +128,100 @@ class RealTimeArbiter:
         for key in expired:
             del self.active_jumps[key]
 
+    def _truncate_motion_to(self, motion: Motion, stop: Position):
+        source = _motion_source(motion)
+        original_dest = _motion_original_dest(motion)
+        path = path_cells(source, original_dest)
+        try:
+            stop_index = path.index(stop)
+        except ValueError:
+            return
+        steps = len(path) - 1
+        if steps <= 0:
+            return
+        motion.to_row = stop.row
+        motion.to_col = stop.col
+        motion.duration = int(round(motion.original_duration * stop_index / float(steps)))
+
+    def _resolve_same_color_path_blocks(self, game_state: GameState):
+        """
+        Same-color near-meet: whoever reaches a shared path cell later stops
+        on the square before that cell. Earlier piece continues.
+        """
+        motions = list(self.active_motions.values())
+        for i in range(len(motions)):
+            for j in range(i + 1, len(motions)):
+                a = motions[i]
+                b = motions[j]
+                if a.piece_token[0] != b.piece_token[0]:
+                    continue
+                src_a = _motion_source(a)
+                src_b = _motion_source(b)
+                orig_a = _motion_original_dest(a)
+                orig_b = _motion_original_dest(b)
+                for cell in shared_path_cells(src_a, orig_a, src_b, orig_b):
+                    # Ignore pure start-square overlap.
+                    if cell == src_a or cell == src_b:
+                        continue
+                    t_a = time_to_reach_cell(
+                        a.start_time, a.original_duration, src_a, orig_a, cell
+                    )
+                    t_b = time_to_reach_cell(
+                        b.start_time, b.original_duration, src_b, orig_b, cell
+                    )
+                    if t_a is None or t_b is None:
+                        continue
+                    if is_earlier_arrival(t_a, a.order, t_b, b.order):
+                        earlier, later = a, b
+                        earlier_src, earlier_orig = src_a, orig_a
+                        later_src, later_orig = src_b, orig_b
+                        t_later = t_b
+                    else:
+                        earlier, later = b, a
+                        earlier_src, earlier_orig = src_b, orig_b
+                        later_src, later_orig = src_a, orig_a
+                        t_later = t_a
+                    # Near-meet if later arrives before earlier leaves (None = stays forever).
+                    leave = time_to_leave_cell(
+                        earlier.start_time, earlier.original_duration,
+                        earlier_src, earlier_orig, cell,
+                    )
+                    if leave is not None and t_later > leave:
+                        continue
+                    stop = last_square_before(later_src, later_orig, cell)
+                    current = _motion_dest(later)
+                    better = earlier_stop_along_path(later_src, later_orig, current, stop)
+                    if better != current:
+                        self._truncate_motion_to(later, better)
+
+        self._resolve_static_path_blocks(game_state)
+
+    def _resolve_static_path_blocks(self, game_state: GameState):
+        """Block movers that would pass through a piece already sitting on their path."""
+        moving_ids = {motion.piece_id for motion in self.active_motions.values()}
+        for motion in list(self.active_motions.values()):
+            source = _motion_source(motion)
+            original = _motion_original_dest(motion)
+            path = path_cells(source, original)
+            for cell in path[1:]:
+                occupant = game_state.board.piece_at(cell)
+                if occupant is None or occupant.id in moving_ids:
+                    continue
+                if occupant.color == motion.piece_token[0]:
+                    # Ally already on path — stop before that square.
+                    stop = last_square_before(source, original, cell)
+                else:
+                    # Enemy on an intermediate square — cannot pass through.
+                    if cell == original:
+                        continue
+                    stop = last_square_before(source, original, cell)
+                current = _motion_dest(motion)
+                better = earlier_stop_along_path(source, original, current, stop)
+                if better != current:
+                    self._truncate_motion_to(motion, better)
+
     def _stop_at(self, game_state: GameState, motion: Motion, stop: Position):
-        """Settle a piece on the closest square reached before a same-color collision."""
-        source = Position(motion.from_row, motion.from_col)
+        source = _motion_source(motion)
         if stop == source:
             return
         if game_state.board.piece_at(stop) is not None:
@@ -125,6 +235,7 @@ class RealTimeArbiter:
     def _apply_motion(self, game_state: GameState, motion: Motion) -> bool:
         airborne = self._is_airborne_at(motion.to_row, motion.to_col)
         if airborne and airborne.piece_token[0] != motion.piece_token[0]:
+            # Airborne defender still eats the attacker.
             game_state.board.remove_piece(Position(motion.from_row, motion.from_col))
             if motion.piece_token[1] == 'K':
                 game_state.game_over = True
@@ -133,12 +244,11 @@ class RealTimeArbiter:
                 return True
             return False
 
-        source = Position(motion.from_row, motion.from_col)
-        destination = Position(motion.to_row, motion.to_col)
+        source = _motion_source(motion)
+        destination = _motion_dest(motion)
         occupant = game_state.board.piece_at(destination)
 
-        # Same-color collision: never capture an ally.
-        # Stop on the closest square reached before the meeting square.
+        # Same-color: later arriver never captures — stop before the meeting cell.
         if occupant is not None and occupant.color == motion.piece_token[0]:
             stop = last_square_before(source, destination, destination)
             self._stop_at(game_state, motion, stop)
@@ -148,7 +258,8 @@ class RealTimeArbiter:
         if moving_piece is None:
             return False
 
-        # Opposite-color capture: remove the loser and cancel its in-flight motion.
+        # Opposite-color: this mover arrived at destination now → eats whoever is there
+        # (idle piece, or earlier arriver). Later always eats earlier.
         if occupant is not None:
             game_state.board.remove_piece(destination)
             self.active_motions.pop((destination.row, destination.col), None)
@@ -171,10 +282,9 @@ class RealTimeArbiter:
         if not due_motions:
             return
 
-        # First to start (start_time, then order) is resolved first.
-        due_motions.sort(key=lambda move: (move.start_time, move.order))
+        # Earlier arrival first; later movers applied after so they can eat.
+        due_motions.sort(key=lambda move: (move.arrival_time, move.order))
         cancelled = set()
-        same_color_stops = {}
 
         for i, motion in enumerate(due_motions):
             if i in cancelled:
@@ -183,46 +293,22 @@ class RealTimeArbiter:
                 if j in cancelled:
                     continue
                 other = due_motions[j]
-                same_color = motion.piece_token[0] == other.piece_token[0]
-                head_on = _is_mutual_swap(motion, other)
-                same_dest = _is_same_destination(motion, other)
-
-                # Same-color collision: both stop on last square before they meet.
-                if same_color and head_on:
-                    src_a = Position(motion.from_row, motion.from_col)
-                    dst_a = Position(motion.to_row, motion.to_col)
-                    src_b = Position(other.from_row, other.from_col)
-                    dst_b = Position(other.to_row, other.to_col)
-                    stop_a, stop_b = last_squares_before_head_on(src_a, dst_a, src_b, dst_b)
-                    same_color_stops[i] = stop_a
-                    same_color_stops[j] = stop_b
-                    cancelled.add(i)
-                    cancelled.add(j)
+                if motion.piece_token[0] == other.piece_token[0]:
                     continue
-
-                if same_color and same_dest:
-                    src_a = Position(motion.from_row, motion.from_col)
-                    dst = Position(motion.to_row, motion.to_col)
-                    src_b = Position(other.from_row, other.from_col)
-                    same_color_stops[i] = last_square_before(src_a, dst, dst)
-                    same_color_stops[j] = last_square_before(src_b, dst, dst)
+                # Opposite-color head-on swap: later eats earlier.
+                # Cancel earlier so they stay on their square; later captures them there.
+                if _is_mutual_swap(motion, other):
                     cancelled.add(i)
-                    cancelled.add(j)
-                    continue
-
-                # Opposite-color head-on: first to leave eats the other.
-                if head_on and not same_color:
-                    cancelled.add(j)
 
         for i, motion in enumerate(due_motions):
             if game_state.game_over:
                 break
-            if i in same_color_stops:
-                self._stop_at(game_state, motion, same_color_stops[i])
-            elif i not in cancelled:
+            if i not in cancelled:
                 self._apply_motion(game_state, motion)
 
         self._expire_due_jumps()
 
     def complete_pending(self, game_state: GameState):
+        self._resolve_same_color_path_blocks(game_state)
         self._complete_due_motions(game_state)
+        self._resolve_same_color_path_blocks(game_state)

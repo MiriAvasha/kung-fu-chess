@@ -44,6 +44,12 @@ class PieceAssetLoader:
         self.cell_size = cell_size
         self._cache = {}
 
+    def set_cell_size(self, cell_size: int):
+        if cell_size == self.cell_size:
+            return
+        self.cell_size = cell_size
+        self._cache.clear()
+
     def load(self, color: str, kind: str) -> PieceAssets:
         key = (color, kind)
         if key in self._cache:

@@ -38,28 +38,61 @@ def last_square_before(source: Position, destination: Position, collision: Posit
     return path[0]
 
 
-def _are_adjacent(a: Position, b: Position) -> bool:
-    return max(abs(a.row - b.row), abs(a.col - b.col)) == 1
+def time_to_reach_cell(start_time: int, duration: int, source: Position, destination: Position, cell: Position):
+    """Absolute time when the mover reaches `cell` along source→destination, or None."""
+    path = path_cells(source, destination)
+    steps = len(path) - 1
+    for index, step_cell in enumerate(path):
+        if step_cell != cell:
+            continue
+        if steps <= 0:
+            return start_time
+        return start_time + int(round(duration * index / float(steps)))
+    return None
 
 
-def last_squares_before_head_on(
-    source_a: Position, dest_a: Position,
-    source_b: Position, dest_b: Position,
-):
+def time_to_leave_cell(start_time: int, duration: int, source: Position, destination: Position, cell: Position):
     """
-    For two allies walking into each other: each stops on the closest square
-    reached before they meet (same cell or face-to-face).
+    Absolute time when the mover leaves `cell` toward the next square.
+    Returns None if the piece stays on that cell (destination / never leaves).
     """
-    path_a = path_cells(source_a, dest_a)
-    path_b = path_cells(source_b, dest_b)
-    max_t = min(len(path_a), len(path_b)) - 1
-    for t in range(1, max_t + 1):
-        cell_a = path_a[t]
-        cell_b = path_b[t]
-        if cell_a == cell_b:
-            return path_a[t - 1], path_b[t - 1]
-        if _are_adjacent(cell_a, cell_b):
-            return cell_a, cell_b
-    stop_a = path_a[-2] if len(path_a) >= 2 else path_a[0]
-    stop_b = path_b[-2] if len(path_b) >= 2 else path_b[0]
-    return stop_a, stop_b
+    path = path_cells(source, destination)
+    steps = len(path) - 1
+    for index, step_cell in enumerate(path):
+        if step_cell != cell:
+            continue
+        # Destination square: piece arrives and stays — blocks forever for near-meet.
+        if steps <= 0 or index >= steps:
+            return None
+        return start_time + int(round(duration * (index + 1) / float(steps)))
+    return None
+
+
+def shared_path_cells(source_a: Position, dest_a: Position, source_b: Position, dest_b: Position):
+    """Cells that appear on both paths (meeting / crossing squares)."""
+    cells_a = path_cells(source_a, dest_a)
+    cells_b = set(path_cells(source_b, dest_b))
+    return [cell for cell in cells_a if cell in cells_b]
+
+
+def is_earlier_arrival(time_a, order_a, time_b, order_b) -> bool:
+    """True if A arrives earlier than B (order breaks ties)."""
+    if time_a != time_b:
+        return time_a < time_b
+    return order_a < order_b
+
+
+def earlier_stop_along_path(source: Position, destination: Position, current_stop: Position, candidate: Position) -> Position:
+    """Pick whichever stop is closer to source along the path."""
+    path = path_cells(source, destination)
+    try:
+        current_index = path.index(current_stop)
+    except ValueError:
+        current_index = len(path) - 1
+    try:
+        candidate_index = path.index(candidate)
+    except ValueError:
+        return current_stop
+    if candidate_index < current_index:
+        return candidate
+    return current_stop
