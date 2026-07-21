@@ -2,16 +2,17 @@ import json
 import os
 from typing import Dict, List, Optional
 
-import pygame
+import cv2
+
+from img import Img
 
 
 def asset_folder_for(color: str, kind: str) -> str:
-    # folders look like wP, bK, wR ...
     return color + kind
 
-
+# אחראי על מצב אחד של כלי
 class StateAssets:
-    def __init__(self, name: str, config: dict, sprites: List[pygame.Surface]):
+    def __init__(self, name: str, config: dict, sprites: List[Img]):
         self.name = name
         self.config = config
         self.sprites = sprites
@@ -21,23 +22,23 @@ class StateAssets:
         self.next_state = physics.get('next_state_when_finished', 'idle')
         self.frames_per_sec = float(graphics.get('frames_per_sec', 6))
         self.is_loop = bool(graphics.get('is_loop', True))
-
+# משתנה
     @property
     def animation_duration_ms(self) -> int:
         if not self.sprites or self.frames_per_sec <= 0:
             return 500
         return int(round(len(self.sprites) / self.frames_per_sec * 1000))
 
-
+# אחראי על כל הכלי, כולל מצבים שונים שלו
 class PieceAssets:
     def __init__(self, folder_name: str, states: Dict[str, StateAssets]):
         self.folder_name = folder_name
         self.states = states
-
+# הולכת למילון ומחזירה לפי מצב אחד של הכלי את כל המידע שלו
     def get_state(self, state_name: str) -> Optional[StateAssets]:
         return self.states.get(state_name)
 
-
+# אחראית על הטעינה של כל הכלים, כולל מצבים שונים שלהם
 class PieceAssetLoader:
     def __init__(self, pieces_root: str, cell_size: int = 100):
         self.pieces_root = pieces_root
@@ -75,18 +76,18 @@ class PieceAssetLoader:
         self._cache[key] = assets
         return assets
 
-    def _load_sprites(self, sprites_dir: str) -> List[pygame.Surface]:
+    def _load_sprites(self, sprites_dir: str) -> List[Img]:
         if not os.path.isdir(sprites_dir):
             return []
         names = sorted(
             [name for name in os.listdir(sprites_dir) if name.lower().endswith('.png')],
-            key=lambda name: int(os.path.splitext(name)[0])
+            key=lambda name: int(os.path.splitext(name)[0]),
         )
         sprites = []
+        size = (self.cell_size, self.cell_size)
         for name in names:
             path = os.path.join(sprites_dir, name)
-            image = pygame.image.load(path)
-            if pygame.display.get_surface() is not None:
-                image = image.convert_alpha()
-            sprites.append(pygame.transform.smoothscale(image, (self.cell_size, self.cell_size)))
+            sprites.append(
+                Img().read(path, size=size, keep_aspect=False, interpolation=cv2.INTER_AREA)
+            )
         return sprites

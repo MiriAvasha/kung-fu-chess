@@ -1,26 +1,40 @@
-from typing import Literal, get_args
+from enum import Enum
+
 
 EMPTY_CELL = '.'
-VALID_COLORS = {'w', 'b'}
-PieceKind = Literal['K', 'Q', 'R', 'B', 'N', 'P']
-VALID_PIECES = frozenset(get_args(PieceKind))
+FIRST_ROW = 0
+
+
+class PieceColor(str, Enum):
+    WHITE = 'w'
+    BLACK = 'b'
+
+
+VALID_COLORS = frozenset(color.value for color in PieceColor)
+
+class PieceKind(str, Enum):
+    KING = 'K'
+    QUEEN = 'Q'
+    ROOK = 'R'
+    BISHOP = 'B'
+    KNIGHT = 'N'
+    PAWN = 'P'
+
+
+VALID_PIECES = frozenset(piece.value for piece in PieceKind)
 CELL_SIZE = 100
 MS_PER_CELL = 1000
 JUMP_DURATION = 1000
 
-PAWN_FORWARD = {'w': -1, 'b': 1}
-# כמה שורות מהקצה הרגלי יכול לבצע צעד כפול
-PAWN_START_ROW_OFFSET = 1
-
+PAWN_FORWARD = {PieceColor.WHITE.value: -1, PieceColor.BLACK.value: 1}
 PIECE_SPEEDS = {
-    'P': 1000,
-    'R': 1000,
-    'B': 1000,
-    'N': 1000,
-    'Q': 1000,
-    'K': 1000,
+    PieceKind.PAWN.value: 1000,
+    PieceKind.ROOK.value: 1000,
+    PieceKind.BISHOP.value: 1000,
+    PieceKind.KNIGHT.value: 1000,
+    PieceKind.QUEEN.value: 1000,
+    PieceKind.KING.value: 1000,
 }
-
 
 def get_speed_for_piece(piece_type: str) -> int:
     return PIECE_SPEEDS.get(piece_type, MS_PER_CELL)

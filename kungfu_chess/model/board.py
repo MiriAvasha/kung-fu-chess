@@ -4,6 +4,9 @@ import constants
 from model.piece import Piece, PieceState
 from model.position import Position
 
+# כמה שורות מהקצה הרגלי יכול לבצע צעד כפול
+PAWN_START_ROW_OFFSET = 1
+
 
 class Board:
     def __init__(self):
@@ -16,8 +19,8 @@ class Board:
 
     def get_pawn_start_row(self, color: str) -> int:
         if color == 'w':
-            return self.height - 1 - constants.PAWN_START_ROW_OFFSET
-        return constants.PAWN_START_ROW_OFFSET
+            return self.height - 1 - PAWN_START_ROW_OFFSET
+        return PAWN_START_ROW_OFFSET
 
     def piece_at(self, position: Position):
         return self._cells.get((position.row, position.col))
