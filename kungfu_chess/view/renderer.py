@@ -9,6 +9,8 @@ from assets.piece_loader import PieceAssetLoader
 from engine.results import GameSnapshot
 from img import Img
 
+SELECTED_BORDER_COLOR = (0, 255, 255, 255)
+
 
 class Renderer:
     """Builds an image from a read-only GameSnapshot."""
@@ -30,16 +32,11 @@ class Renderer:
     def _cell_metrics(
         self,
         snapshot: GameSnapshot,
-        board_canvas: Img,
     ) -> Tuple[int, int, int]:
         if snapshot.board_width <= 0 or snapshot.board_height <= 0:
             raise ValueError('Snapshot board dimensions must be positive')
 
-        height, width = board_canvas.img.shape[:2]
-        cell_h = height // snapshot.board_height
-        cell_w = width // snapshot.board_width
-        cell_size = min(cell_h, cell_w)
-        return cell_w, cell_h, cell_size
+        return self.cell_size, self.cell_size, self.cell_size
 
     def _piece_sprite(self, token: str) -> Img:
         color, kind = token[0], token[1]
@@ -53,8 +50,12 @@ class Renderer:
         return idle_state.sprites[0]
 
     def render(self, snapshot: GameSnapshot) -> Img:
-        board_canvas = Img().read(self.board_image_path)
-        cell_w, cell_h, cell_size = self._cell_metrics(snapshot, board_canvas)
+        cell_w, cell_h, cell_size = self._cell_metrics(snapshot)
+        canvas_size = (
+            snapshot.board_width * cell_w,
+            snapshot.board_height * cell_h,
+        )
+        board_canvas = Img().read(self.board_image_path, size=canvas_size)
         self.piece_loader.set_cell_size(cell_size)
 
         for row, tokens in enumerate(snapshot.token_grid):
@@ -65,5 +66,19 @@ class Renderer:
                 x = col * cell_w
                 y = row * cell_h
                 piece_img.draw_on(board_canvas, x, y)
+
+        selected = snapshot.selected_cell
+        if selected is not None and (
+            0 <= selected.row < snapshot.board_height
+            and 0 <= selected.col < snapshot.board_width
+        ):
+            board_canvas.draw_rectangle(
+                selected.col * cell_w,
+                selected.row * cell_h,
+                cell_w,
+                cell_h,
+                SELECTED_BORDER_COLOR,
+                thickness=max(2, cell_size // 20),
+            )
 
         return board_canvas

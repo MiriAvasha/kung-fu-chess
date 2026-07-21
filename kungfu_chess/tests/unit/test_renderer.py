@@ -6,7 +6,8 @@ import pytest
 
 from engine.results import GameSnapshot
 from img import Img
-from view.renderer import Renderer
+from model.position import Position
+from view.renderer import SELECTED_BORDER_COLOR, Renderer
 
 
 def _write_image(path, width, height, color):
@@ -33,7 +34,7 @@ class TestRenderer:
     def test_render_uses_snapshot_dimensions_and_tokens(self, tmp_path):
         board_path = tmp_path / 'board.png'
         pieces_root = tmp_path / 'pieces'
-        _write_image(board_path, 20, 20, (0, 0, 0, 255))
+        _write_image(board_path, 37, 31, (0, 0, 0, 255))
         _write_idle_piece(pieces_root, 'wK')
 
         renderer = Renderer(str(board_path), str(pieces_root), cell_size=10)
@@ -50,6 +51,27 @@ class TestRenderer:
         assert result.img.shape == (20, 20, 4)
         assert tuple(result.img[5, 5]) == (10, 20, 30, 255)
         assert tuple(result.img[15, 15]) == (0, 0, 0, 255)
+
+    def test_render_marks_selected_cell(self, tmp_path):
+        board_path = tmp_path / 'board.png'
+        _write_image(board_path, 20, 20, (0, 0, 0, 255))
+        renderer = Renderer(
+            str(board_path),
+            str(tmp_path / 'pieces'),
+            cell_size=10,
+        )
+        snapshot = GameSnapshot(
+            2,
+            2,
+            [['.', '.'], ['.', '.']],
+            game_over=False,
+            selected_cell=Position(0, 1),
+        )
+
+        result = renderer.render(snapshot)
+
+        assert tuple(result.img[0, 10]) == SELECTED_BORDER_COLOR
+        assert tuple(result.img[5, 15]) == (0, 0, 0, 255)
 
     def test_render_rejects_empty_board_dimensions(self, tmp_path):
         board_path = tmp_path / 'board.png'

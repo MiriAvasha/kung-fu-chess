@@ -33,12 +33,19 @@ def main():
     pieces_path = os.path.join(base_dir, 'assets', 'pieces')
 
     engine = build_engine()
-    Controller(engine)
     renderer = Renderer(board_path, pieces_path)
+    controller = Controller(engine, cell_size=renderer.cell_size)
     image_view = ImageView()
 
-    snapshot = engine.snapshot()
-    image_view.show(renderer.render(snapshot))
+    def render_current_state():
+        snapshot = engine.snapshot(controller.selected_cell)
+        return renderer.render(snapshot)
+
+    def handle_click(x: int, y: int):
+        controller.click(x, y)
+        return render_current_state()
+
+    image_view.run(render_current_state(), handle_click)
 
 
 if __name__ == '__main__':

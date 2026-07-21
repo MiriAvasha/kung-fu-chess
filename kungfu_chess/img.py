@@ -76,9 +76,46 @@ class Img:
             cv2.LINE_AA,
         )
 
+    def draw_rectangle(self, x, y, width, height, color, thickness=1):
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+        if width <= 0 or height <= 0:
+            raise ValueError("Rectangle dimensions must be positive.")
+        cv2.rectangle(
+            self.img,
+            (x, y),
+            (x + width - 1, y + height - 1),
+            color,
+            thickness,
+        )
+        return self
+
     def show(self):
         if self.img is None:
             raise ValueError("Image not loaded.")
         cv2.imshow("Image", self.img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    def show_interactive(self, on_left_click, window_name="Image"):
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+
+        current_image = [self]
+
+        def handle_mouse(event, x, y, _flags, _context):
+            if event != cv2.EVENT_LBUTTONDOWN:
+                return
+            updated_image = on_left_click(x, y)
+            if updated_image is None:
+                return
+            if updated_image.img is None:
+                raise ValueError("Updated image is not loaded.")
+            current_image[0] = updated_image
+            cv2.imshow(window_name, updated_image.img)
+
+        cv2.namedWindow(window_name)
+        cv2.setMouseCallback(window_name, handle_mouse)
+        cv2.imshow(window_name, current_image[0].img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
