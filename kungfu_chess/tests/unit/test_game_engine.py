@@ -42,7 +42,7 @@ class TestGameEngineMoves:
 
     def test_capturer_cannot_move_or_jump_until_long_rest_ends(self):
         engine = make_engine([['wR', 'bN', '.']])
-        engine.arbiter.set_long_rest_duration_provider(lambda _token: 500)
+        engine.arbiter.set_long_rest_duration_provider(lambda _token, _state='long_rest': 500)
         assert engine.request_move(
             Position(0, 0),
             Position(0, 1),
@@ -66,9 +66,9 @@ class TestGameEngineMoves:
             Position(0, 2),
         ).is_accepted
 
-    def test_move_without_capture_does_not_start_long_rest(self):
+    def test_move_without_capture_also_starts_long_rest(self):
         engine = make_engine([['wR', '.', '.']])
-        engine.arbiter.set_long_rest_duration_provider(lambda _token: 500)
+        engine.arbiter.set_long_rest_duration_provider(lambda _token, _state='long_rest': 500)
         assert engine.request_move(
             Position(0, 0),
             Position(0, 1),
@@ -76,11 +76,31 @@ class TestGameEngineMoves:
 
         engine.wait(1000)
 
-        assert not engine.arbiter.active_long_rests
+        assert engine.arbiter.active_long_rests
+        assert not engine.request_move(
+            Position(0, 1),
+            Position(0, 2),
+        ).is_accepted
+
+        engine.wait(500)
         assert engine.request_move(
             Position(0, 1),
             Position(0, 2),
         ).is_accepted
+
+    def test_jump_starts_short_rest_when_finished(self):
+        engine = make_engine([['wK']])
+        engine.arbiter.set_long_rest_duration_provider(
+            lambda _token, state='long_rest': 300 if state == 'short_rest' else 500
+        )
+        assert engine.request_jump(Position(0, 0)).is_accepted
+        engine.wait(constants.JUMP_DURATION + 1)
+
+        assert (0, 0) not in engine.arbiter.active_jumps
+        assert engine.arbiter.active_long_rests
+        blocked = engine.request_jump(Position(0, 0))
+        assert not blocked.is_accepted
+        assert blocked.reason == 'long_rest'
 
 
 class TestGameEngineJump:
@@ -91,6 +111,7 @@ class TestGameEngineJump:
         assert (0, 0) in engine.arbiter.active_jumps
         engine.wait(constants.JUMP_DURATION + 1)
         assert (0, 0) not in engine.arbiter.active_jumps
+        # Without a rest-duration provider, jump expiry does not block a new jump.
         assert engine.request_jump(Position(0, 0)).is_accepted
 
     def test_jump_empty_source(self):

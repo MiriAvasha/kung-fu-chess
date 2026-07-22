@@ -1,4 +1,5 @@
 from img import Img
+from view import view_constants as vc
 
 
 class ImageView:
@@ -16,5 +17,5 @@ class ImageView:
             on_left_click,
             on_tick,
             is_animating,
-            window_name='KungFuChess',
+            window_name=vc.WINDOW_NAME,
         )

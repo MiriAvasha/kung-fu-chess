@@ -1,10 +1,7 @@
 import math
 
 from model.position import Position
-
-IDLE_BOB_PERIOD_MS = 1400.0
-IDLE_BOB_RATIO = 0.03
-JUMP_HEIGHT_RATIO = 0.28
+from view import view_constants as vc
 
 
 def motion_progress(motion, current_time: int) -> float:
@@ -39,9 +36,15 @@ def idle_pixel_position(
     visual_time_ms: int,
     cell_size: int,
 ):
-    phase = (row * 7 + col * 13) * 0.35
-    angle = visual_time_ms / IDLE_BOB_PERIOD_MS * math.pi * 2.0 + phase
-    offset_y = math.sin(angle) * max(1.0, cell_size * IDLE_BOB_RATIO)
+    phase = (
+        row * vc.IDLE_BOB_PHASE_ROW
+        + col * vc.IDLE_BOB_PHASE_COL
+    ) * vc.IDLE_BOB_PHASE_SCALE
+    angle = (
+        visual_time_ms / vc.IDLE_BOB_PERIOD_MS * math.pi * 2.0
+        + phase
+    )
+    offset_y = math.sin(angle) * max(1.0, cell_size * vc.IDLE_BOB_RATIO)
     return col * cell_size, row * cell_size + offset_y
 
 
@@ -54,7 +57,7 @@ def jump_progress(jump, current_time: int) -> float:
 
 def jump_pixel_position(jump, current_time: int, cell_size: int):
     progress = jump_progress(jump, current_time)
-    hop_height = math.sin(progress * math.pi) * cell_size * JUMP_HEIGHT_RATIO
+    hop_height = math.sin(progress * math.pi) * cell_size * vc.JUMP_HEIGHT_RATIO
     return (
         jump.col * cell_size,
         jump.row * cell_size - hop_height,

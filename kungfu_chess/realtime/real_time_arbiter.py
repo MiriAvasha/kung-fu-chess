@@ -67,30 +67,44 @@ class RealTimeArbiter:
         self._move_order = 0
 
     def set_long_rest_duration_provider(self, provider):
+        """provider(token, state_name) -> duration_ms"""
         self._long_rest_duration_provider = provider
 
     def is_piece_resting(self, piece_id: int) -> bool:
         return piece_id in self.active_long_rests
 
-    def _start_capture_rest(
+    def _rest_duration(self, token: str, state_name: str) -> int:
+        if self._long_rest_duration_provider is None:
+            return 0
+        try:
+            return int(self._long_rest_duration_provider(token, state_name))
+        except TypeError:
+            # Backward-compatible providers that accept only the token.
+            return int(self._long_rest_duration_provider(token))
+
+    def _start_rest(
         self,
-        piece,
+        piece_id: int,
+        piece_token: str,
         position: Position,
-        start_time: int,
+        state_name: str,
     ):
-        if piece is None or self._long_rest_duration_provider is None:
+        duration = self._rest_duration(piece_token, state_name)
+        if piece_id <= 0 or duration <= 0:
             return
-        duration = int(self._long_rest_duration_provider(piece.token))
-        if duration <= 0:
-            return
-        self.active_long_rests[piece.id] = LongRest(
-            piece.id,
-            piece.token,
+        self.active_long_rests[piece_id] = LongRest(
+            piece_id,
+            piece_token,
             position.row,
             position.col,
-            start_time,
+            self.current_time,
             duration,
         )
+
+    def _start_rest_for_piece(self, piece, position: Position, state_name: str):
+        if piece is None:
+            return
+        self._start_rest(piece.id, piece.token, position, state_name)
 
     def _expire_due_long_rests(self):
         expired = [
@@ -126,7 +140,15 @@ class RealTimeArbiter:
         self._resolve_same_color_path_blocks(game_state)
 
     def start_jump(self, game_state: GameState, row: int, col: int, piece_token: str):
-        self.active_jumps[(row, col)] = Jump(piece_token, row, col, self.current_time)
+        piece = game_state.board.piece_at(Position(row, col))
+        piece_id = piece.id if piece is not None else 0
+        self.active_jumps[(row, col)] = Jump(
+            piece_id,
+            piece_token,
+            row,
+            col,
+            self.current_time,
+        )
 
     def has_opposite_color_route_conflict(
         self, game_state: GameState, piece_color: str,
@@ -165,9 +187,19 @@ class RealTimeArbiter:
         return None
 
     def _expire_due_jumps(self):
-        expired = [key for key, jump in self.active_jumps.items() if self.current_time > jump.end_time]
-        for key in expired:
+        expired = [
+            (key, jump)
+            for key, jump in self.active_jumps.items()
+            if self.current_time > jump.end_time
+        ]
+        for key, jump in expired:
             del self.active_jumps[key]
+            self._start_rest(
+                jump.piece_id,
+                jump.piece_token,
+                Position(jump.row, jump.col),
+                'short_rest',
+            )
 
     def _truncate_motion_to(self, motion: Motion, stop: Position):
         source = _motion_source(motion)
@@ -272,6 +304,7 @@ class RealTimeArbiter:
             return
         new_kind = DEFAULT_PROMOTION_SERVICE.resolve(game_state.board, moving_piece, stop)
         game_state.board.move_piece(source, stop, new_kind)
+        self._start_rest_for_piece(moving_piece, stop, 'long_rest')
 
     def _apply_motion(self, game_state: GameState, motion: Motion) -> bool:
         airborne = self._is_airborne_at(
@@ -291,10 +324,10 @@ class RealTimeArbiter:
                 self.active_jumps.clear()
                 self.active_long_rests.clear()
                 return True
-            self._start_capture_rest(
+            self._start_rest_for_piece(
                 defender,
                 Position(motion.to_row, motion.to_col),
-                motion.arrival_time,
+                'long_rest',
             )
             return False
 
@@ -327,12 +360,8 @@ class RealTimeArbiter:
             self.active_motions.clear()
             self.active_long_rests.clear()
             return True
-        if occupant is not None:
-            self._start_capture_rest(
-                moving_piece,
-                destination,
-                motion.arrival_time,
-            )
+        # After every successful landing the piece rests (asset FSM: move → long_rest).
+        self._start_rest_for_piece(moving_piece, destination, 'long_rest')
         return False
 
     def _complete_due_motions(self, game_state: GameState):

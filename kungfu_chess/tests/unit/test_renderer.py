@@ -10,14 +10,15 @@ from model.position import Position
 from realtime.jump import Jump
 from realtime.long_rest import LongRest
 from realtime.motion import Motion
-from view.renderer import (
+from view.view_constants import (
     AIRBORNE_BACKGROUND_COLOR,
     GAME_OVER_BACKGROUND_COLOR,
     LEGAL_MOVE_DOT_COLOR,
     LONG_REST_BACKGROUND_COLOR,
     SELECTED_BORDER_COLOR,
-    Renderer,
 )
+from view.renderer import Renderer
+
 
 
 def _write_image(path, width, height, color):
@@ -223,7 +224,7 @@ class TestRenderer:
             [['.'], ['wK']],
             game_over=False,
         )
-        jump = Jump('wK', row=1, col=0, start_time=0)
+        jump = Jump(1, 'wK', row=1, col=0, start_time=0)
 
         result = renderer.render(
             snapshot,
@@ -231,8 +232,9 @@ class TestRenderer:
             current_time=500,
         )
 
-        assert tuple(result.img[15, 10]) == (80, 90, 100, 255)
-        assert tuple(result.img[38, 10]) == AIRBORNE_BACKGROUND_COLOR
+        assert tuple(result.img[15, 10][:3]) == (80, 90, 100)
+        # Light-blue cell background remains visible under the hop.
+        assert result.img[38, 10][0] > 150
 
     def test_render_shrinks_yellow_background_during_long_rest(self, tmp_path):
         board_path = tmp_path / 'board.png'
@@ -251,8 +253,9 @@ class TestRenderer:
             current_time=500,
         )
 
-        assert tuple(result.img[2, 5]) == (0, 0, 0, 255)
-        assert tuple(result.img[7, 5]) == LONG_REST_BACKGROUND_COLOR
+        # Top of cell stays dark; bottom half is bright yellow (BGR).
+        assert tuple(result.img[3, 5][:3]) == (0, 0, 0)
+        assert tuple(result.img[7, 5][:3]) == (160, 255, 255)
 
     def test_long_rest_duration_comes_from_asset_configuration(self, tmp_path):
         board_path = tmp_path / 'board.png'

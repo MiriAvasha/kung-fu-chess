@@ -55,7 +55,7 @@ def test_idle_piece_bobs_slightly_inside_its_cell():
 
 
 def test_jump_reaches_peak_halfway_through_duration():
-    jump = Jump('wK', row=1, col=2, start_time=0)
+    jump = Jump(1, 'wK', row=1, col=2, start_time=0)
 
     assert jump_progress(jump, 500) == 0.5
     assert jump_pixel_position(jump, 500, cell_size=100) == pytest.approx(
