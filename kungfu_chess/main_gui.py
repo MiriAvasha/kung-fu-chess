@@ -5,6 +5,7 @@ from input.controller import Controller
 from model.board import board_from_token_rows
 from model.game_state import GameState
 from realtime.real_time_arbiter import RealTimeArbiter
+from rules.piece_rules import PIECE_RULES
 from rules.rule_engine import RuleEngine
 from view.image_view import ImageView
 from view.renderer import Renderer
@@ -39,10 +40,33 @@ def main():
 
     def render_current_state():
         snapshot = engine.snapshot(controller.selected_cell)
-        return renderer.render(snapshot)
+        legal_destinations = set()
+        if controller.selected_cell is not None:
+            piece = engine.game_state.board.piece_at(controller.selected_cell)
+            if piece is not None:
+                rule = PIECE_RULES.get(piece.kind)
+                if rule is not None:
+                    legal_destinations = rule.legal_destinations(
+                        engine.game_state.board,
+                        piece,
+                    )
+        return renderer.render(snapshot, legal_destinations)
 
     def handle_click(x: int, y: int):
+        motions_before_click = set(engine.arbiter.active_motions)
         controller.click(x, y)
+        new_motion_sources = (
+            set(engine.arbiter.active_motions) - motions_before_click
+        )
+        if new_motion_sources:
+            remaining_times = [
+                engine.arbiter.active_motions[source].arrival_time
+                - engine.arbiter.current_time
+                for source in new_motion_sources
+                if source in engine.arbiter.active_motions
+            ]
+            if remaining_times:
+                engine.wait(max(remaining_times))
         return render_current_state()
 
     image_view.run(render_current_state(), handle_click)

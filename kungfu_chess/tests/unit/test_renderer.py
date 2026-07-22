@@ -7,7 +7,7 @@ import pytest
 from engine.results import GameSnapshot
 from img import Img
 from model.position import Position
-from view.renderer import SELECTED_BORDER_COLOR, Renderer
+from view.renderer import LEGAL_MOVE_DOT_COLOR, SELECTED_BORDER_COLOR, Renderer
 
 
 def _write_image(path, width, height, color):
@@ -71,6 +71,26 @@ class TestRenderer:
         result = renderer.render(snapshot)
 
         assert tuple(result.img[0, 10]) == SELECTED_BORDER_COLOR
+        assert tuple(result.img[5, 15]) == (0, 0, 0, 255)
+
+    def test_render_marks_legal_destinations_with_center_dots(self, tmp_path):
+        board_path = tmp_path / 'board.png'
+        _write_image(board_path, 20, 20, (0, 0, 0, 255))
+        renderer = Renderer(
+            str(board_path),
+            str(tmp_path / 'pieces'),
+            cell_size=10,
+        )
+        snapshot = GameSnapshot(
+            2,
+            2,
+            [['.', '.'], ['.', '.']],
+            game_over=False,
+        )
+
+        result = renderer.render(snapshot, {Position(1, 0)})
+
+        assert tuple(result.img[15, 5]) == LEGAL_MOVE_DOT_COLOR
         assert tuple(result.img[5, 15]) == (0, 0, 0, 255)
 
     def test_render_rejects_empty_board_dimensions(self, tmp_path):

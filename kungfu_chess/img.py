@@ -90,6 +90,21 @@ class Img:
         )
         return self
 
+    def draw_circle(self, center_x, center_y, radius, color, thickness=-1):
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+        if radius <= 0:
+            raise ValueError("Circle radius must be positive.")
+        cv2.circle(
+            self.img,
+            (center_x, center_y),
+            radius,
+            color,
+            thickness,
+            cv2.LINE_AA,
+        )
+        return self
+
     def show(self):
         if self.img is None:
             raise ValueError("Image not loaded.")

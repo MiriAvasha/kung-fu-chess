@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -10,6 +10,7 @@ from engine.results import GameSnapshot
 from img import Img
 
 SELECTED_BORDER_COLOR = (0, 255, 255, 255)
+LEGAL_MOVE_DOT_COLOR = (70, 220, 70, 255)
 
 
 class Renderer:
@@ -49,7 +50,11 @@ class Renderer:
             )
         return idle_state.sprites[0]
 
-    def render(self, snapshot: GameSnapshot) -> Img:
+    def render(
+        self,
+        snapshot: GameSnapshot,
+        legal_destinations: Iterable = (),
+    ) -> Img:
         cell_w, cell_h, cell_size = self._cell_metrics(snapshot)
         canvas_size = (
             snapshot.board_width * cell_w,
@@ -66,6 +71,19 @@ class Renderer:
                 x = col * cell_w
                 y = row * cell_h
                 piece_img.draw_on(board_canvas, x, y)
+
+        dot_radius = max(4, cell_size // 9)
+        for destination in legal_destinations:
+            if (
+                0 <= destination.row < snapshot.board_height
+                and 0 <= destination.col < snapshot.board_width
+            ):
+                board_canvas.draw_circle(
+                    destination.col * cell_w + cell_w // 2,
+                    destination.row * cell_h + cell_h // 2,
+                    dot_radius,
+                    LEGAL_MOVE_DOT_COLOR,
+                )
 
         selected = snapshot.selected_cell
         if selected is not None and (
