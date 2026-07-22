@@ -1,6 +1,7 @@
 from model.game_state import GameState
 from model.position import Position
 from realtime.jump import Jump
+from realtime.long_rest import LongRest
 from realtime.motion import Motion
 from rules.path_utils import (
     earlier_stop_along_path,
@@ -57,11 +58,48 @@ def _motion_original_dest(motion: Motion) -> Position:
 
 
 class RealTimeArbiter:
-    def __init__(self):
+    def __init__(self, long_rest_duration_provider=None):
         self.current_time = 0
         self.active_motions = {}
         self.active_jumps = {}
+        self.active_long_rests = {}
+        self._long_rest_duration_provider = long_rest_duration_provider
         self._move_order = 0
+
+    def set_long_rest_duration_provider(self, provider):
+        self._long_rest_duration_provider = provider
+
+    def is_piece_resting(self, piece_id: int) -> bool:
+        return piece_id in self.active_long_rests
+
+    def _start_capture_rest(
+        self,
+        piece,
+        position: Position,
+        start_time: int,
+    ):
+        if piece is None or self._long_rest_duration_provider is None:
+            return
+        duration = int(self._long_rest_duration_provider(piece.token))
+        if duration <= 0:
+            return
+        self.active_long_rests[piece.id] = LongRest(
+            piece.id,
+            piece.token,
+            position.row,
+            position.col,
+            start_time,
+            duration,
+        )
+
+    def _expire_due_long_rests(self):
+        expired = [
+            piece_id
+            for piece_id, rest in self.active_long_rests.items()
+            if self.current_time >= rest.end_time
+        ]
+        for piece_id in expired:
+            del self.active_long_rests[piece_id]
 
     def has_active_motion_from(self, row: int, col: int) -> bool:
         return (row, col) in self.active_motions
@@ -74,6 +112,7 @@ class RealTimeArbiter:
         self._resolve_same_color_path_blocks(game_state)
         self._complete_due_motions(game_state)
         self._expire_due_jumps()
+        self._expire_due_long_rests()
         self._resolve_same_color_path_blocks(game_state)
 
     def start_motion(self, game_state: GameState, from_row, from_col, to_row, to_col, piece_token, duration):
@@ -242,12 +281,21 @@ class RealTimeArbiter:
         )
         if airborne and airborne.piece_token[0] != motion.piece_token[0]:
             # Airborne defender still eats the attacker.
+            defender = game_state.board.piece_at(
+                Position(motion.to_row, motion.to_col)
+            )
             game_state.board.remove_piece(Position(motion.from_row, motion.from_col))
             if motion.piece_token[1] == 'K':
                 game_state.game_over = True
                 self.active_motions.clear()
                 self.active_jumps.clear()
+                self.active_long_rests.clear()
                 return True
+            self._start_capture_rest(
+                defender,
+                Position(motion.to_row, motion.to_col),
+                motion.arrival_time,
+            )
             return False
 
         source = _motion_source(motion)
@@ -267,6 +315,7 @@ class RealTimeArbiter:
         # Opposite-color: this mover arrived at destination now → eats whoever is there
         # (idle piece, or earlier arriver). Later always eats earlier.
         if occupant is not None:
+            self.active_long_rests.pop(occupant.id, None)
             game_state.board.remove_piece(destination)
             self.active_motions.pop((destination.row, destination.col), None)
 
@@ -276,7 +325,14 @@ class RealTimeArbiter:
         if occupant is not None and occupant.kind == 'K':
             game_state.game_over = True
             self.active_motions.clear()
+            self.active_long_rests.clear()
             return True
+        if occupant is not None:
+            self._start_capture_rest(
+                moving_piece,
+                destination,
+                motion.arrival_time,
+            )
         return False
 
     def _complete_due_motions(self, game_state: GameState):
@@ -316,4 +372,5 @@ class RealTimeArbiter:
         self._resolve_same_color_path_blocks(game_state)
         self._complete_due_motions(game_state)
         self._expire_due_jumps()
+        self._expire_due_long_rests()
         self._resolve_same_color_path_blocks(game_state)

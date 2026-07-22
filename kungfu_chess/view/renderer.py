@@ -22,6 +22,8 @@ SELECTED_BORDER_COLOR = (0, 255, 255, 255)
 LEGAL_MOVE_DOT_COLOR = (70, 220, 70, 255)
 GAME_OVER_BACKGROUND_COLOR = (35, 35, 190, 255)
 GAME_OVER_TEXT_COLOR = (255, 255, 255, 255)
+LONG_REST_BACKGROUND_COLOR = (0, 220, 255, 255)
+AIRBORNE_BACKGROUND_COLOR = (255, 230, 150, 255)
 
 
 class Renderer:
@@ -61,6 +63,14 @@ class Renderer:
             self._board_cache_size = canvas_size
         return self._board_cache.copy()
 
+    def long_rest_duration_ms(self, token: str) -> int:
+        color, kind = token[0], token[1]
+        piece_assets = self.piece_loader.load(color, kind)
+        rest_state = piece_assets.get_state("long_rest")
+        if rest_state is None:
+            return 0
+        return rest_state.animation_duration_ms
+
     def _piece_sprite(
         self,
         token: str,
@@ -90,6 +100,7 @@ class Renderer:
         legal_destinations: Iterable = (),
         active_motions: Iterable = (),
         active_jumps: Iterable = (),
+        active_long_rests: Iterable = (),
         current_time: int = 0,
         visual_time_ms: int = 0,
     ) -> Img:
@@ -102,11 +113,40 @@ class Renderer:
         self.piece_loader.set_cell_size(cell_size)
         motions = tuple(active_motions)
         jumps = tuple(active_jumps)
+        long_rests = tuple(active_long_rests)
         moving_sources = motion_source_cells(motions)
         jumping_cells = {
             Position(jump.row, jump.col)
             for jump in jumps
         }
+        rests_by_cell = {
+            Position(rest.row, rest.col): rest
+            for rest in long_rests
+        }
+
+        for rest in long_rests:
+            remaining_ratio = rest.remaining_ratio(current_time)
+            fill_height = int(round(cell_h * remaining_ratio))
+            if fill_height <= 0:
+                continue
+            board_canvas.draw_rectangle(
+                rest.col * cell_w,
+                rest.row * cell_h + cell_h - fill_height,
+                cell_w,
+                fill_height,
+                LONG_REST_BACKGROUND_COLOR,
+                thickness=-1,
+            )
+
+        for jump in jumps:
+            board_canvas.draw_rectangle(
+                jump.col * cell_w,
+                jump.row * cell_h,
+                cell_w,
+                cell_h,
+                AIRBORNE_BACKGROUND_COLOR,
+                thickness=-1,
+            )
 
         for row, tokens in enumerate(snapshot.token_grid):
             for col, token in enumerate(tokens):
@@ -115,17 +155,27 @@ class Renderer:
                 cell = Position(row, col)
                 if cell in moving_sources or cell in jumping_cells:
                     continue
-                piece_img = self._piece_sprite(
-                    token,
-                    state_name="idle",
-                    elapsed_ms=visual_time_ms,
-                )
-                x, y = idle_pixel_position(
-                    row,
-                    col,
-                    visual_time_ms,
-                    cell_size,
-                )
+                rest = rests_by_cell.get(cell)
+                if rest is not None:
+                    elapsed_ms = max(0, current_time - rest.start_time)
+                    piece_img = self._piece_sprite(
+                        token,
+                        state_name="long_rest",
+                        elapsed_ms=elapsed_ms,
+                    )
+                    x, y = col * cell_w, row * cell_h
+                else:
+                    piece_img = self._piece_sprite(
+                        token,
+                        state_name="idle",
+                        elapsed_ms=visual_time_ms,
+                    )
+                    x, y = idle_pixel_position(
+                        row,
+                        col,
+                        visual_time_ms,
+                        cell_size,
+                    )
                 piece_img.draw_on_clipped(
                     board_canvas,
                     int(round(x)),

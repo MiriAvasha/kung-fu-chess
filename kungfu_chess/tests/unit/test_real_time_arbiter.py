@@ -189,6 +189,20 @@ class TestAirborneJump:
         assert engine.game_state.board.piece_at(Position(0, 0)) is None
         assert (0, 1) not in engine.arbiter.active_jumps
 
+    def test_airborne_defender_rests_after_eating_attacker(self):
+        engine = make_engine([['wR', 'bN']])
+        defender = engine.game_state.board.piece_at(Position(0, 1))
+        engine.arbiter.set_long_rest_duration_provider(lambda _token: 500)
+        assert engine.request_jump(Position(0, 1)).is_accepted
+        assert engine.request_move(
+            Position(0, 0),
+            Position(0, 1),
+        ).is_accepted
+
+        engine.wait(1000)
+
+        assert engine.arbiter.is_piece_resting(defender.id)
+
     def test_king_attacker_eaten_by_airborne_ends_game(self):
         engine = make_engine([['wK', 'bN']])
         engine.request_jump(Position(0, 1))

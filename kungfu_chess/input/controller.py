@@ -57,6 +57,8 @@ class Controller:
                 return
             if (cell.row, cell.col) in self.engine.arbiter.active_jumps:
                 return
+            if self.engine.arbiter.is_piece_resting(clicked_piece.id):
+                return
             self.selected_cell = cell
 
     def jump(self, x: int, y: int):

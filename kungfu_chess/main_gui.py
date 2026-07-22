@@ -35,6 +35,9 @@ def main():
 
     engine = build_engine()
     renderer = Renderer(board_path, pieces_path)
+    engine.arbiter.set_long_rest_duration_provider(
+        renderer.long_rest_duration_ms
+    )
     controller = Controller(engine, cell_size=renderer.cell_size)
     image_view = ImageView()
     visual_time_ms = [0]
@@ -56,6 +59,7 @@ def main():
             legal_destinations,
             active_motions=engine.arbiter.active_motions.values(),
             active_jumps=engine.arbiter.active_jumps.values(),
+            active_long_rests=engine.arbiter.active_long_rests.values(),
             current_time=engine.arbiter.current_time,
             visual_time_ms=visual_time_ms[0],
         )
@@ -68,6 +72,7 @@ def main():
         has_timed_action = (
             engine.arbiter.has_any_active_motion()
             or bool(engine.arbiter.active_jumps)
+            or bool(engine.arbiter.active_long_rests)
         )
         if elapsed_ms > 0 and has_timed_action:
             engine.wait(elapsed_ms)

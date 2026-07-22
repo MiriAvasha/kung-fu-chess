@@ -66,6 +66,20 @@ class TestController:
 
         assert controller.selected_cell is None
 
+    def test_cannot_select_piece_during_capture_rest(self):
+        controller, engine = make_controller([['wR', 'bN']])
+        engine.arbiter.set_long_rest_duration_provider(lambda _token: 500)
+        assert engine.request_move(
+            Position(0, 0),
+            Position(0, 1),
+        ).is_accepted
+        engine.wait(1000)
+        x, y = pixel_for(0, 1)
+
+        controller.click(x, y)
+
+        assert controller.selected_cell is None
+
     def test_cannot_select_piece_already_moving(self):
         controller, engine = make_controller([['wR', '.', '.']])
         x0, y0 = pixel_for(0, 0)

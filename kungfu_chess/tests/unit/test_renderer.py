@@ -8,10 +8,13 @@ from engine.results import GameSnapshot
 from img import Img
 from model.position import Position
 from realtime.jump import Jump
+from realtime.long_rest import LongRest
 from realtime.motion import Motion
 from view.renderer import (
+    AIRBORNE_BACKGROUND_COLOR,
     GAME_OVER_BACKGROUND_COLOR,
     LEGAL_MOVE_DOT_COLOR,
+    LONG_REST_BACKGROUND_COLOR,
     SELECTED_BORDER_COLOR,
     Renderer,
 )
@@ -78,6 +81,26 @@ def _write_animated_idle_piece(pieces_root, token):
     )
     _write_image(sprites_path / '1.png', 10, 10, (10, 20, 30, 255))
     _write_image(sprites_path / '2.png', 10, 10, (110, 120, 130, 255))
+
+
+def _write_long_rest_piece(pieces_root, token):
+    rest_path = pieces_root / token / 'states' / 'long_rest'
+    sprites_path = rest_path / 'sprites'
+    sprites_path.mkdir(parents=True)
+    (rest_path / 'config.json').write_text(
+        json.dumps({
+            'physics': {},
+            'graphics': {'frames_per_sec': 2, 'is_loop': False},
+        }),
+        encoding='utf-8',
+    )
+    for frame in range(1, 6):
+        _write_image(
+            sprites_path / f'{frame}.png',
+            10,
+            10,
+            (140, 150, 160, 255),
+        )
 
 
 class TestRenderer:
@@ -209,7 +232,36 @@ class TestRenderer:
         )
 
         assert tuple(result.img[15, 10]) == (80, 90, 100, 255)
-        assert tuple(result.img[38, 10]) == (0, 0, 0, 255)
+        assert tuple(result.img[38, 10]) == AIRBORNE_BACKGROUND_COLOR
+
+    def test_render_shrinks_yellow_background_during_long_rest(self, tmp_path):
+        board_path = tmp_path / 'board.png'
+        _write_image(board_path, 10, 10, (0, 0, 0, 255))
+        renderer = Renderer(
+            str(board_path),
+            str(tmp_path / 'pieces'),
+            cell_size=10,
+        )
+        snapshot = GameSnapshot(1, 1, [['.']], game_over=False)
+        rest = LongRest(1, 'wR', 0, 0, start_time=0, duration=1000)
+
+        result = renderer.render(
+            snapshot,
+            active_long_rests=[rest],
+            current_time=500,
+        )
+
+        assert tuple(result.img[2, 5]) == (0, 0, 0, 255)
+        assert tuple(result.img[7, 5]) == LONG_REST_BACKGROUND_COLOR
+
+    def test_long_rest_duration_comes_from_asset_configuration(self, tmp_path):
+        board_path = tmp_path / 'board.png'
+        pieces_root = tmp_path / 'pieces'
+        _write_image(board_path, 10, 10, (0, 0, 0, 255))
+        _write_long_rest_piece(pieces_root, 'wK')
+        renderer = Renderer(str(board_path), str(pieces_root), cell_size=10)
+
+        assert renderer.long_rest_duration_ms('wK') == 2500
 
     def test_render_writes_game_over_banner(self, tmp_path):
         board_path = tmp_path / 'board.png'

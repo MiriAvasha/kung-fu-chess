@@ -25,6 +25,8 @@ class GameEngine:
             return MoveResult(False, validation.reason)
 
         piece = self.game_state.board.piece_at(source)
+        if self.arbiter.is_piece_resting(piece.id):
+            return MoveResult(False, 'long_rest')
         if self.arbiter.has_opposite_color_route_conflict(
             self.game_state, piece.color, source.row, source.col, destination.row, destination.col
         ):
@@ -53,6 +55,9 @@ class GameEngine:
         piece = self.game_state.board.piece_at(cell)
         if piece is None:
             return MoveResult(False, 'empty_source')
+
+        if self.arbiter.is_piece_resting(piece.id):
+            return MoveResult(False, 'long_rest')
 
         if self.arbiter.has_active_motion_from(cell.row, cell.col):
             return MoveResult(False, 'motion_in_progress')

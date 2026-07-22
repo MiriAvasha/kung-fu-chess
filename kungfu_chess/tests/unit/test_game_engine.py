@@ -40,6 +40,48 @@ class TestGameEngineMoves:
         motion = next(iter(engine.arbiter.active_motions.values()))
         assert motion.duration == 3 * constants.get_speed_for_piece('R')
 
+    def test_capturer_cannot_move_or_jump_until_long_rest_ends(self):
+        engine = make_engine([['wR', 'bN', '.']])
+        engine.arbiter.set_long_rest_duration_provider(lambda _token: 500)
+        assert engine.request_move(
+            Position(0, 0),
+            Position(0, 1),
+        ).is_accepted
+        engine.wait(1000)
+
+        move_result = engine.request_move(
+            Position(0, 1),
+            Position(0, 2),
+        )
+        jump_result = engine.request_jump(Position(0, 1))
+
+        assert not move_result.is_accepted
+        assert move_result.reason == 'long_rest'
+        assert not jump_result.is_accepted
+        assert jump_result.reason == 'long_rest'
+
+        engine.wait(500)
+        assert engine.request_move(
+            Position(0, 1),
+            Position(0, 2),
+        ).is_accepted
+
+    def test_move_without_capture_does_not_start_long_rest(self):
+        engine = make_engine([['wR', '.', '.']])
+        engine.arbiter.set_long_rest_duration_provider(lambda _token: 500)
+        assert engine.request_move(
+            Position(0, 0),
+            Position(0, 1),
+        ).is_accepted
+
+        engine.wait(1000)
+
+        assert not engine.arbiter.active_long_rests
+        assert engine.request_move(
+            Position(0, 1),
+            Position(0, 2),
+        ).is_accepted
+
 
 class TestGameEngineJump:
     def test_jump_accepted_and_expires(self):
