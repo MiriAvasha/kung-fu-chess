@@ -8,9 +8,17 @@ import constants
 from assets.piece_loader import PieceAssetLoader
 from engine.results import GameSnapshot
 from img import Img
+from model.position import Position
+from view.motion_layout import (
+    motion_pixel_position,
+    motion_progress,
+    motion_source_cells,
+)
 
 SELECTED_BORDER_COLOR = (0, 255, 255, 255)
 LEGAL_MOVE_DOT_COLOR = (70, 220, 70, 255)
+GAME_OVER_BACKGROUND_COLOR = (35, 35, 190, 255)
+GAME_OVER_TEXT_COLOR = (255, 255, 255, 255)
 
 
 class Renderer:
@@ -39,21 +47,35 @@ class Renderer:
 
         return self.cell_size, self.cell_size, self.cell_size
 
-    def _piece_sprite(self, token: str) -> Img:
+    def _piece_sprite(
+        self,
+        token: str,
+        state_name: str = "idle",
+        elapsed_ms: int = 0,
+    ) -> Img:
         color, kind = token[0], token[1]
         piece_assets = self.piece_loader.load(color, kind)
-        idle_state = piece_assets.get_state("idle")
-        if idle_state is None or not idle_state.sprites:
+        state = piece_assets.get_state(state_name)
+        if state is None or not state.sprites:
+            state = piece_assets.get_state("idle")
+        if state is None or not state.sprites:
             raise FileNotFoundError(
-                f"No idle sprite for {token}. "
+                f"No usable sprite for {token}. "
                 f"Available states: {sorted(piece_assets.states.keys())}"
             )
-        return idle_state.sprites[0]
+        frame_index = int(max(0, elapsed_ms) / 1000.0 * state.frames_per_sec)
+        if state.is_loop:
+            frame_index %= len(state.sprites)
+        else:
+            frame_index = min(frame_index, len(state.sprites) - 1)
+        return state.sprites[frame_index]
 
     def render(
         self,
         snapshot: GameSnapshot,
         legal_destinations: Iterable = (),
+        active_motions: Iterable = (),
+        current_time: int = 0,
     ) -> Img:
         cell_w, cell_h, cell_size = self._cell_metrics(snapshot)
         canvas_size = (
@@ -62,10 +84,14 @@ class Renderer:
         )
         board_canvas = Img().read(self.board_image_path, size=canvas_size)
         self.piece_loader.set_cell_size(cell_size)
+        motions = tuple(active_motions)
+        moving_sources = motion_source_cells(motions)
 
         for row, tokens in enumerate(snapshot.token_grid):
             for col, token in enumerate(tokens):
                 if token == constants.EMPTY_CELL or len(token) != 2:
+                    continue
+                if Position(row, col) in moving_sources:
                     continue
                 piece_img = self._piece_sprite(token)
                 x = col * cell_w
@@ -97,6 +123,39 @@ class Renderer:
                 cell_h,
                 SELECTED_BORDER_COLOR,
                 thickness=max(2, cell_size // 20),
+            )
+
+        for motion in motions:
+            x, y = motion_pixel_position(motion, current_time, cell_size)
+            elapsed_ms = int(
+                motion_progress(motion, current_time) * motion.duration
+            )
+            piece_img = self._piece_sprite(
+                motion.piece_token,
+                state_name="move",
+                elapsed_ms=elapsed_ms,
+            )
+            piece_img.draw_on(board_canvas, int(round(x)), int(round(y)))
+
+        if snapshot.game_over:
+            canvas_width, canvas_height = canvas_size
+            banner_height = max(cell_size, canvas_height // 4)
+            banner_y = (canvas_height - banner_height) // 2
+            board_canvas.draw_rectangle(
+                0,
+                banner_y,
+                canvas_width,
+                banner_height,
+                GAME_OVER_BACKGROUND_COLOR,
+                thickness=-1,
+            )
+            board_canvas.put_centered_text(
+                "Game Over",
+                canvas_width // 2,
+                canvas_height // 2,
+                font_size=max(0.5, cell_size / 45.0),
+                color=GAME_OVER_TEXT_COLOR,
+                thickness=max(1, cell_size // 25),
             )
 
         return board_canvas

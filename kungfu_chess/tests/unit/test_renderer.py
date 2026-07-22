@@ -7,7 +7,13 @@ import pytest
 from engine.results import GameSnapshot
 from img import Img
 from model.position import Position
-from view.renderer import LEGAL_MOVE_DOT_COLOR, SELECTED_BORDER_COLOR, Renderer
+from realtime.motion import Motion
+from view.renderer import (
+    GAME_OVER_BACKGROUND_COLOR,
+    LEGAL_MOVE_DOT_COLOR,
+    SELECTED_BORDER_COLOR,
+    Renderer,
+)
 
 
 def _write_image(path, width, height, color):
@@ -28,6 +34,20 @@ def _write_idle_piece(pieces_root, token):
         encoding='utf-8',
     )
     _write_image(sprites_path / '1.png', 10, 10, (10, 20, 30, 255))
+
+
+def _write_move_piece(pieces_root, token):
+    move_path = pieces_root / token / 'states' / 'move'
+    sprites_path = move_path / 'sprites'
+    sprites_path.mkdir(parents=True)
+    (move_path / 'config.json').write_text(
+        json.dumps({
+            'physics': {'speed_m_per_sec': 1},
+            'graphics': {'frames_per_sec': 1, 'is_loop': True},
+        }),
+        encoding='utf-8',
+    )
+    _write_image(sprites_path / '1.png', 10, 10, (50, 60, 70, 255))
 
 
 class TestRenderer:
@@ -92,6 +112,52 @@ class TestRenderer:
 
         assert tuple(result.img[15, 5]) == LEGAL_MOVE_DOT_COLOR
         assert tuple(result.img[5, 15]) == (0, 0, 0, 255)
+
+    def test_render_interpolates_active_motion_without_drawing_source_twice(
+        self,
+        tmp_path,
+    ):
+        board_path = tmp_path / 'board.png'
+        pieces_root = tmp_path / 'pieces'
+        _write_image(board_path, 30, 10, (0, 0, 0, 255))
+        _write_idle_piece(pieces_root, 'wR')
+        _write_move_piece(pieces_root, 'wR')
+        renderer = Renderer(str(board_path), str(pieces_root), cell_size=10)
+        snapshot = GameSnapshot(
+            3,
+            1,
+            [['wR', '.', '.']],
+            game_over=False,
+        )
+        motion = Motion(1, 'wR', 0, 0, 0, 2, 0, 1000, 1)
+
+        result = renderer.render(
+            snapshot,
+            active_motions=[motion],
+            current_time=500,
+        )
+
+        assert tuple(result.img[5, 5]) == (0, 0, 0, 255)
+        assert tuple(result.img[5, 15]) == (50, 60, 70, 255)
+
+    def test_render_writes_game_over_banner(self, tmp_path):
+        board_path = tmp_path / 'board.png'
+        _write_image(board_path, 100, 100, (0, 0, 0, 255))
+        renderer = Renderer(
+            str(board_path),
+            str(tmp_path / 'pieces'),
+            cell_size=50,
+        )
+        snapshot = GameSnapshot(
+            2,
+            2,
+            [['.', '.'], ['.', '.']],
+            game_over=True,
+        )
+
+        result = renderer.render(snapshot)
+
+        assert tuple(result.img[30, 1]) == GAME_OVER_BACKGROUND_COLOR
 
     def test_render_rejects_empty_board_dimensions(self, tmp_path):
         board_path = tmp_path / 'board.png'

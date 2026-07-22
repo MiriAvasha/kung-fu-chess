@@ -50,26 +50,29 @@ def main():
                         engine.game_state.board,
                         piece,
                     )
-        return renderer.render(snapshot, legal_destinations)
+        return renderer.render(
+            snapshot,
+            legal_destinations,
+            active_motions=engine.arbiter.active_motions.values(),
+            current_time=engine.arbiter.current_time,
+        )
 
     def handle_click(x: int, y: int):
-        motions_before_click = set(engine.arbiter.active_motions)
         controller.click(x, y)
-        new_motion_sources = (
-            set(engine.arbiter.active_motions) - motions_before_click
-        )
-        if new_motion_sources:
-            remaining_times = [
-                engine.arbiter.active_motions[source].arrival_time
-                - engine.arbiter.current_time
-                for source in new_motion_sources
-                if source in engine.arbiter.active_motions
-            ]
-            if remaining_times:
-                engine.wait(max(remaining_times))
-        return render_current_state()
 
-    image_view.run(render_current_state(), handle_click)
+    def advance_animation(elapsed_ms: int):
+        if elapsed_ms > 0 and engine.arbiter.has_any_active_motion():
+            engine.wait(elapsed_ms)
+
+    def is_animating():
+        return engine.arbiter.has_any_active_motion()
+
+    image_view.run(
+        render_current_state,
+        handle_click,
+        advance_animation,
+        is_animating,
+    )
 
 
 if __name__ == '__main__':

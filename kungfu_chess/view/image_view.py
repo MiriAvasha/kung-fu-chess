@@ -9,5 +9,12 @@ class ImageView:
         image.show()
 
     @staticmethod
-    def run(image: Img, on_left_click):
-        image.show_interactive(on_left_click, window_name='KungFuChess')
+    def run(make_frame, on_left_click, on_tick, is_animating):
+        image = make_frame()
+        image.show_animation_loop(
+            make_frame,
+            on_left_click,
+            on_tick,
+            is_animating,
+            window_name='KungFuChess',
+        )

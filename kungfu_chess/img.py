@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import time
 
 import cv2
 import numpy as np
@@ -76,6 +77,33 @@ class Img:
             cv2.LINE_AA,
         )
 
+    def put_centered_text(
+        self,
+        txt,
+        center_x,
+        center_y,
+        font_size,
+        color=(255, 255, 255, 255),
+        thickness=1,
+    ):
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+        (text_width, text_height), baseline = cv2.getTextSize(
+            txt,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_size,
+            thickness,
+        )
+        self.put_text(
+            txt,
+            center_x - text_width // 2,
+            center_y + (text_height - baseline) // 2,
+            font_size,
+            color,
+            thickness,
+        )
+        return self
+
     def draw_rectangle(self, x, y, width, height, color, thickness=1):
         if self.img is None:
             raise ValueError("Image not loaded.")
@@ -134,3 +162,53 @@ class Img:
         cv2.imshow(window_name, current_image[0].img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+    def show_animation_loop(
+        self,
+        make_frame,
+        on_left_click,
+        on_tick,
+        is_animating,
+        window_name="Image",
+    ):
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+
+        current_image = [self]
+        needs_redraw = [False]
+
+        def handle_mouse(event, x, y, _flags, _context):
+            if event != cv2.EVENT_LBUTTONDOWN:
+                return
+            on_left_click(x, y)
+            needs_redraw[0] = True
+
+        cv2.namedWindow(window_name)
+        cv2.setMouseCallback(window_name, handle_mouse)
+        cv2.imshow(window_name, current_image[0].img)
+        last_frame_time = time.perf_counter()
+
+        try:
+            while True:
+                now = time.perf_counter()
+                elapsed_ms = min(50, max(0, int((now - last_frame_time) * 1000)))
+                last_frame_time = now
+
+                was_animating = is_animating()
+                on_tick(elapsed_ms)
+                if needs_redraw[0] or was_animating or is_animating():
+                    updated_image = make_frame()
+                    if updated_image is None or updated_image.img is None:
+                        raise ValueError("Updated image is not loaded.")
+                    current_image[0] = updated_image
+                    cv2.imshow(window_name, updated_image.img)
+                    needs_redraw[0] = False
+
+                delay_ms = 16 if is_animating() else 30
+                key = cv2.waitKey(delay_ms) & 0xFF
+                if key in (27, ord('q')):
+                    break
+                if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                    break
+        finally:
+            cv2.destroyAllWindows()
