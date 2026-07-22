@@ -11,6 +11,13 @@ class Img:
     def __init__(self):
         self.img = None
 
+    def copy(self):
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+        duplicate = Img()
+        duplicate.img = self.img.copy()
+        return duplicate
+
     def read(
         self,
         path: str | pathlib.Path,
@@ -62,6 +69,46 @@ class Img:
                 roi[..., c] = (1 - mask) * roi[..., c] + mask * self.img[..., c]
         else:
             other_img.img[y:y + h, x:x + w] = self.img
+
+    def draw_on_clipped(self, other_img, x, y):
+        if self.img is None or other_img.img is None:
+            raise ValueError("Both images must be loaded before drawing.")
+
+        if self.img.shape[2] != other_img.img.shape[2]:
+            if self.img.shape[2] == 3 and other_img.img.shape[2] == 4:
+                self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2BGRA)
+            elif self.img.shape[2] == 4 and other_img.img.shape[2] == 3:
+                self.img = cv2.cvtColor(self.img, cv2.COLOR_BGRA2BGR)
+
+        h, w = self.img.shape[:2]
+        canvas_h, canvas_w = other_img.img.shape[:2]
+        destination_x = max(0, x)
+        destination_y = max(0, y)
+        source_x = max(0, -x)
+        source_y = max(0, -y)
+        draw_width = min(w - source_x, canvas_w - destination_x)
+        draw_height = min(h - source_y, canvas_h - destination_y)
+        if draw_width <= 0 or draw_height <= 0:
+            return self
+
+        sprite = self.img[
+            source_y:source_y + draw_height,
+            source_x:source_x + draw_width,
+        ]
+        roi = other_img.img[
+            destination_y:destination_y + draw_height,
+            destination_x:destination_x + draw_width,
+        ]
+        if sprite.shape[2] == 4:
+            alpha = sprite[..., 3] / 255.0
+            for channel in range(3):
+                roi[..., channel] = (
+                    (1 - alpha) * roi[..., channel]
+                    + alpha * sprite[..., channel]
+                )
+        else:
+            roi[:] = sprite
+        return self
 
     def put_text(self, txt, x, y, font_size, color=(255, 255, 255, 255), thickness=1):
         if self.img is None:

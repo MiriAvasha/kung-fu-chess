@@ -37,6 +37,7 @@ def main():
     renderer = Renderer(board_path, pieces_path)
     controller = Controller(engine, cell_size=renderer.cell_size)
     image_view = ImageView()
+    visual_time_ms = [0]
 
     def render_current_state():
         snapshot = engine.snapshot(controller.selected_cell)
@@ -54,18 +55,25 @@ def main():
             snapshot,
             legal_destinations,
             active_motions=engine.arbiter.active_motions.values(),
+            active_jumps=engine.arbiter.active_jumps.values(),
             current_time=engine.arbiter.current_time,
+            visual_time_ms=visual_time_ms[0],
         )
 
     def handle_click(x: int, y: int):
         controller.click(x, y)
 
     def advance_animation(elapsed_ms: int):
-        if elapsed_ms > 0 and engine.arbiter.has_any_active_motion():
+        visual_time_ms[0] += elapsed_ms
+        has_timed_action = (
+            engine.arbiter.has_any_active_motion()
+            or bool(engine.arbiter.active_jumps)
+        )
+        if elapsed_ms > 0 and has_timed_action:
             engine.wait(elapsed_ms)
 
     def is_animating():
-        return engine.arbiter.has_any_active_motion()
+        return not engine.game_state.game_over
 
     image_view.run(
         render_current_state,

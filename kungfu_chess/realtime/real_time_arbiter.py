@@ -73,6 +73,7 @@ class RealTimeArbiter:
         self.current_time += ms
         self._resolve_same_color_path_blocks(game_state)
         self._complete_due_motions(game_state)
+        self._expire_due_jumps()
         self._resolve_same_color_path_blocks(game_state)
 
     def start_motion(self, game_state: GameState, from_row, from_col, to_row, to_col, piece_token, duration):
@@ -117,9 +118,10 @@ class RealTimeArbiter:
                 return True
         return False
 
-    def _is_airborne_at(self, row: int, col: int):
+    def _is_airborne_at(self, row: int, col: int, at_time: int = None):
         jump = self.active_jumps.get((row, col))
-        if jump and self.current_time <= jump.end_time:
+        checked_time = self.current_time if at_time is None else at_time
+        if jump and jump.start_time <= checked_time <= jump.end_time:
             return jump
         return None
 
@@ -233,7 +235,11 @@ class RealTimeArbiter:
         game_state.board.move_piece(source, stop, new_kind)
 
     def _apply_motion(self, game_state: GameState, motion: Motion) -> bool:
-        airborne = self._is_airborne_at(motion.to_row, motion.to_col)
+        airborne = self._is_airborne_at(
+            motion.to_row,
+            motion.to_col,
+            at_time=motion.arrival_time,
+        )
         if airborne and airborne.piece_token[0] != motion.piece_token[0]:
             # Airborne defender still eats the attacker.
             game_state.board.remove_piece(Position(motion.from_row, motion.from_col))
@@ -306,9 +312,8 @@ class RealTimeArbiter:
             if i not in cancelled:
                 self._apply_motion(game_state, motion)
 
-        self._expire_due_jumps()
-
     def complete_pending(self, game_state: GameState):
         self._resolve_same_color_path_blocks(game_state)
         self._complete_due_motions(game_state)
+        self._expire_due_jumps()
         self._resolve_same_color_path_blocks(game_state)

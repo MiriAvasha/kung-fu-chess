@@ -47,6 +47,25 @@ class TestController:
         controller.jump(x, y)
         assert (0, 0) in engine.arbiter.active_jumps
 
+    def test_second_click_on_selected_piece_starts_jump(self):
+        controller, engine = make_controller([['wK']])
+        x, y = pixel_for(0, 0)
+
+        controller.click(x, y)
+        controller.click(x, y)
+
+        assert controller.selected_cell is None
+        assert (0, 0) in engine.arbiter.active_jumps
+
+    def test_cannot_select_piece_while_it_is_jumping(self):
+        controller, engine = make_controller([['wK']])
+        x, y = pixel_for(0, 0)
+        assert engine.request_jump(Position(0, 0)).is_accepted
+
+        controller.click(x, y)
+
+        assert controller.selected_cell is None
+
     def test_cannot_select_piece_already_moving(self):
         controller, engine = make_controller([['wR', '.', '.']])
         x0, y0 = pixel_for(0, 0)

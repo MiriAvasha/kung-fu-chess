@@ -1,4 +1,10 @@
+import math
+
 from model.position import Position
+
+IDLE_BOB_PERIOD_MS = 1400.0
+IDLE_BOB_RATIO = 0.03
+JUMP_HEIGHT_RATIO = 0.28
 
 
 def motion_progress(motion, current_time: int) -> float:
@@ -25,3 +31,31 @@ def motion_source_cells(motions):
         Position(motion.from_row, motion.from_col)
         for motion in motions
     }
+
+
+def idle_pixel_position(
+    row: int,
+    col: int,
+    visual_time_ms: int,
+    cell_size: int,
+):
+    phase = (row * 7 + col * 13) * 0.35
+    angle = visual_time_ms / IDLE_BOB_PERIOD_MS * math.pi * 2.0 + phase
+    offset_y = math.sin(angle) * max(1.0, cell_size * IDLE_BOB_RATIO)
+    return col * cell_size, row * cell_size + offset_y
+
+
+def jump_progress(jump, current_time: int) -> float:
+    if jump.duration <= 0:
+        return 1.0
+    elapsed = current_time - jump.start_time
+    return max(0.0, min(1.0, elapsed / float(jump.duration)))
+
+
+def jump_pixel_position(jump, current_time: int, cell_size: int):
+    progress = jump_progress(jump, current_time)
+    hop_height = math.sin(progress * math.pi) * cell_size * JUMP_HEIGHT_RATIO
+    return (
+        jump.col * cell_size,
+        jump.row * cell_size - hop_height,
+    )

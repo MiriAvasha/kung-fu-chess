@@ -48,10 +48,8 @@ class TestGameEngineJump:
         assert result.is_accepted
         assert (0, 0) in engine.arbiter.active_jumps
         engine.wait(constants.JUMP_DURATION + 1)
-        engine.arbiter.complete_pending(engine.game_state)
-        # expire happens inside complete due motions path; force expire
-        engine.arbiter._expire_due_jumps()
         assert (0, 0) not in engine.arbiter.active_jumps
+        assert engine.request_jump(Position(0, 0)).is_accepted
 
     def test_jump_empty_source(self):
         engine = make_engine([['.']])

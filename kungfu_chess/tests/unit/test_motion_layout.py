@@ -1,6 +1,12 @@
+import pytest
+
 from model.position import Position
+from realtime.jump import Jump
 from realtime.motion import Motion
 from view.motion_layout import (
+    idle_pixel_position,
+    jump_pixel_position,
+    jump_progress,
     motion_pixel_position,
     motion_progress,
     motion_source_cells,
@@ -39,3 +45,19 @@ def test_motion_source_cells_returns_original_board_cells():
     motion = _motion()
 
     assert motion_source_cells([motion]) == {Position(1, 0)}
+
+
+def test_idle_piece_bobs_slightly_inside_its_cell():
+    x, y = idle_pixel_position(0, 0, visual_time_ms=350, cell_size=100)
+
+    assert x == 0
+    assert y == pytest.approx(3.0)
+
+
+def test_jump_reaches_peak_halfway_through_duration():
+    jump = Jump('wK', row=1, col=2, start_time=0)
+
+    assert jump_progress(jump, 500) == 0.5
+    assert jump_pixel_position(jump, 500, cell_size=100) == pytest.approx(
+        (200.0, 72.0)
+    )

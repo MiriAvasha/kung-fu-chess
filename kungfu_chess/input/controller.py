@@ -42,7 +42,10 @@ class Controller:
                 self.selected_cell = None
                 return
 
-            result = self.engine.request_move(source, cell)
+            if source == cell:
+                result = self.engine.request_jump(source)
+            else:
+                result = self.engine.request_move(source, cell)
             if result.is_accepted:
                 self.selected_cell = None
             elif clicked_piece is not None and clicked_piece.color == source_piece.color:
@@ -51,6 +54,8 @@ class Controller:
                 self.selected_cell = None
         elif clicked_piece is not None:
             if self.engine.arbiter.has_active_motion_from(cell.row, cell.col):
+                return
+            if (cell.row, cell.col) in self.engine.arbiter.active_jumps:
                 return
             self.selected_cell = cell
 

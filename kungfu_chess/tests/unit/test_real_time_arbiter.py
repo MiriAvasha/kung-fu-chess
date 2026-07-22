@@ -175,6 +175,20 @@ class TestAirborneJump:
         assert engine.game_state.board.piece_at(Position(0, 1)).token == 'bN'
         assert engine.game_state.board.piece_at(Position(0, 0)) is None
 
+    def test_airborne_result_uses_arrival_time_when_frame_overshoots(self):
+        engine = make_engine([['wR', 'bN']])
+        assert engine.request_jump(Position(0, 1)).is_accepted
+        assert engine.request_move(
+            Position(0, 0),
+            Position(0, 1),
+        ).is_accepted
+
+        engine.wait(1050)
+
+        assert engine.game_state.board.piece_at(Position(0, 1)).token == 'bN'
+        assert engine.game_state.board.piece_at(Position(0, 0)) is None
+        assert (0, 1) not in engine.arbiter.active_jumps
+
     def test_king_attacker_eaten_by_airborne_ends_game(self):
         engine = make_engine([['wK', 'bN']])
         engine.request_jump(Position(0, 1))

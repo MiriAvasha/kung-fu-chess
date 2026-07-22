@@ -10,6 +10,9 @@ from engine.results import GameSnapshot
 from img import Img
 from model.position import Position
 from view.motion_layout import (
+    idle_pixel_position,
+    jump_pixel_position,
+    jump_progress,
     motion_pixel_position,
     motion_progress,
     motion_source_cells,
@@ -32,6 +35,8 @@ class Renderer:
     ):
         self.board_image_path = board_image_path
         self.cell_size = cell_size
+        self._board_cache = None
+        self._board_cache_size = None
 
         if pieces_path is None:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +51,15 @@ class Renderer:
             raise ValueError('Snapshot board dimensions must be positive')
 
         return self.cell_size, self.cell_size, self.cell_size
+
+    def _board_canvas(self, canvas_size) -> Img:
+        if self._board_cache is None or self._board_cache_size != canvas_size:
+            self._board_cache = Img().read(
+                self.board_image_path,
+                size=canvas_size,
+            )
+            self._board_cache_size = canvas_size
+        return self._board_cache.copy()
 
     def _piece_sprite(
         self,
@@ -75,28 +89,48 @@ class Renderer:
         snapshot: GameSnapshot,
         legal_destinations: Iterable = (),
         active_motions: Iterable = (),
+        active_jumps: Iterable = (),
         current_time: int = 0,
+        visual_time_ms: int = 0,
     ) -> Img:
         cell_w, cell_h, cell_size = self._cell_metrics(snapshot)
         canvas_size = (
             snapshot.board_width * cell_w,
             snapshot.board_height * cell_h,
         )
-        board_canvas = Img().read(self.board_image_path, size=canvas_size)
+        board_canvas = self._board_canvas(canvas_size)
         self.piece_loader.set_cell_size(cell_size)
         motions = tuple(active_motions)
+        jumps = tuple(active_jumps)
         moving_sources = motion_source_cells(motions)
+        jumping_cells = {
+            Position(jump.row, jump.col)
+            for jump in jumps
+        }
 
         for row, tokens in enumerate(snapshot.token_grid):
             for col, token in enumerate(tokens):
                 if token == constants.EMPTY_CELL or len(token) != 2:
                     continue
-                if Position(row, col) in moving_sources:
+                cell = Position(row, col)
+                if cell in moving_sources or cell in jumping_cells:
                     continue
-                piece_img = self._piece_sprite(token)
-                x = col * cell_w
-                y = row * cell_h
-                piece_img.draw_on(board_canvas, x, y)
+                piece_img = self._piece_sprite(
+                    token,
+                    state_name="idle",
+                    elapsed_ms=visual_time_ms,
+                )
+                x, y = idle_pixel_position(
+                    row,
+                    col,
+                    visual_time_ms,
+                    cell_size,
+                )
+                piece_img.draw_on_clipped(
+                    board_canvas,
+                    int(round(x)),
+                    int(round(y)),
+                )
 
         dot_radius = max(4, cell_size // 9)
         for destination in legal_destinations:
@@ -135,7 +169,27 @@ class Renderer:
                 state_name="move",
                 elapsed_ms=elapsed_ms,
             )
-            piece_img.draw_on(board_canvas, int(round(x)), int(round(y)))
+            piece_img.draw_on_clipped(
+                board_canvas,
+                int(round(x)),
+                int(round(y)),
+            )
+
+        for jump in jumps:
+            x, y = jump_pixel_position(jump, current_time, cell_size)
+            elapsed_ms = int(
+                jump_progress(jump, current_time) * jump.duration
+            )
+            piece_img = self._piece_sprite(
+                jump.piece_token,
+                state_name="jump",
+                elapsed_ms=elapsed_ms,
+            )
+            piece_img.draw_on_clipped(
+                board_canvas,
+                int(round(x)),
+                int(round(y)),
+            )
 
         if snapshot.game_over:
             canvas_width, canvas_height = canvas_size
