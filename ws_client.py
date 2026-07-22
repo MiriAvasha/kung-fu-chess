@@ -1,18 +1,12 @@
 import asyncio
+import sys
+from pathlib import Path
 
-import websockets
+PROJECT_DIR = Path(__file__).resolve().parent / 'kungfu_chess'
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
-
-async def main():
-    uri = "ws://localhost:8765"
-    async with websockets.connect(uri) as websocket:
-        message = "Hello from client!"
-        await websocket.send(message)
-        print(f"Sent: {message}")
-
-        response = await websocket.recv()
-        print(f"Echo: {response}")
-
+from client.websocket_client import main
 
 if __name__ == "__main__":
     asyncio.run(main())
