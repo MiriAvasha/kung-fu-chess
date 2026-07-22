@@ -1,3 +1,4 @@
 opencv-python>=4.8.0
 pygame>=2.0.0
 pytest>=7.0.0
+websockets>=12.0
